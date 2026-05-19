@@ -63,58 +63,65 @@ export default function ImageOptimizer() {
   const processQueue = useCallback(async () => {
     if (processingRef.current >= CONCURRENCY) return;
 
-    const nextItem = queue.find((item) => item.status === "queued");
-    if (!nextItem) return;
+    setQueue((prevQueue) => {
+      const nextItem = prevQueue.find((item) => item.status === "queued");
+      if (!nextItem || processingRef.current >= CONCURRENCY) return prevQueue;
 
-    processingRef.current += 1;
-    
-    // Update status to uploading/compressing
-    setQueue((prev) =>
-      prev.map((item) =>
-        item.id === nextItem.id ? { ...item, status: "compressing" } : item
-      )
-    );
+      processingRef.current += 1;
 
-    try {
-      const result = await compressImage(nextItem.originalFile, nextItem.id);
-      
-      setQueue((prev) =>
-        prev.map((item) =>
-          item.id === nextItem.id
-            ? {
-                ...item,
-                status: "done",
-                optimizedFile: result.optimizedFile,
-                optimizedSize: result.optimizedSize,
-                reductionRate:
-                  ((result.originalSize - result.optimizedSize) /
-                    result.originalSize) *
-                  100,
-              }
-            : item
-        )
+      // Start processing in the background
+      (async () => {
+        try {
+          // Update status to compressing
+          setQueue((q) =>
+            q.map((it) => (it.id === nextItem.id ? { ...it, status: "compressing" } : it))
+          );
+
+          const result = await compressImage(nextItem.originalFile, nextItem.id);
+
+          setQueue((q) =>
+            q.map((it) =>
+              it.id === nextItem.id
+                ? {
+                    ...it,
+                    status: "done",
+                    optimizedFile: result.optimizedFile,
+                    optimizedSize: result.optimizedSize,
+                    reductionRate:
+                      ((result.originalSize - result.optimizedSize) / result.originalSize) * 100,
+                  }
+                : it
+            )
+          );
+        } catch (error) {
+          setQueue((q) =>
+            q.map((it) =>
+              it.id === nextItem.id
+                ? {
+                    ...it,
+                    status: "error",
+                    error: error instanceof Error ? error.message : "Error",
+                  }
+                : it
+            )
+          );
+        } finally {
+          processingRef.current -= 1;
+          processQueue(); // Trigger next
+        }
+      })();
+
+      return prevQueue.map((it) =>
+        it.id === nextItem.id ? { ...it, status: "uploading" } : it
       );
-    } catch (error) {
-      setQueue((prev) =>
-        prev.map((item) =>
-          item.id === nextItem.id
-            ? {
-                ...item,
-                status: "error",
-                error: error instanceof Error ? error.message : "Error",
-              }
-            : item
-        )
-      );
-    } finally {
-      processingRef.current -= 1;
-      // Trigger next processing
-      processQueue();
-    }
-  }, [queue]);
+    });
+  }, []);
 
   useEffect(() => {
-    processQueue();
+    const queuedItems = queue.filter((item) => item.status === "queued");
+    if (queuedItems.length > 0 && processingRef.current < CONCURRENCY) {
+      processQueue();
+    }
   }, [queue, processQueue]);
 
   const onDragOver = (e: React.DragEvent) => {
