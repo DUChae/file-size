@@ -6,266 +6,185 @@ import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 
 const MAX_FILES = 10;
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const CONCURRENCY = 2;
 
 export default function ImageOptimizer() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  
-  // Global Settings
   const [globalCategory, setGlobalCategory] = useState<ImageCategory>("screenshot");
   const [globalFormat, setGlobalFormat] = useState<OutputFormat>("original");
-
   const processingRef = useRef<number>(0);
 
   const formatSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   };
 
-  const handleFiles = useCallback(
-    (files: FileList | File[]) => {
-      const fileArray = Array.from(files);
+  const handleFiles = useCallback((files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (queue.length + fileArray.length > MAX_FILES) return;
 
-      if (queue.length + fileArray.length > MAX_FILES) {
-        alert(`최대 ${MAX_FILES}개의 파일만 업로드할 수 있습니다.`);
-        return;
-      }
+    const newItems: QueueItem[] = fileArray.filter(f => ["image/jpeg", "image/jpg", "image/png"].includes(f.type) && f.size <= MAX_FILE_SIZE)
+      .map(file => ({
+        id: Math.random().toString(36).substring(2, 9),
+        originalFile: file,
+        originalSize: file.size,
+        status: "queued",
+        category: globalCategory,
+        targetFormat: globalFormat,
+      }));
 
-      const newItems: QueueItem[] = [];
-
-      for (const file of fileArray) {
-        if (!["image/jpeg", "image/jpg", "image/png"].includes(file.type)) {
-          alert(`${file.name}은(는) 지원하지 않는 형식입니다.`);
-          continue;
-        }
-
-        if (file.size > MAX_FILE_SIZE) {
-          alert(`${file.name}의 크기가 20MB를 초과합니다.`);
-          continue;
-        }
-
-        newItems.push({
-          id: Math.random().toString(36).substring(2, 9),
-          originalFile: file,
-          originalSize: file.size,
-          status: "queued",
-          category: globalCategory,
-          targetFormat: globalFormat,
-        });
-      }
-
-      setQueue((prev) => [...prev, ...newItems]);
-    },
-    [queue.length, globalCategory, globalFormat]
-  );
+    setQueue(prev => [...prev, ...newItems]);
+  }, [queue.length, globalCategory, globalFormat]);
 
   const processQueue = useCallback(async () => {
     if (processingRef.current >= CONCURRENCY) return;
-
-    setQueue((prevQueue) => {
-      const nextItem = prevQueue.find((item) => item.status === "queued");
-      if (!nextItem || processingRef.current >= CONCURRENCY) return prevQueue;
-
+    setQueue(prev => {
+      const nextItem = prev.find(i => i.status === "queued");
+      if (!nextItem || processingRef.current >= CONCURRENCY) return prev;
       processingRef.current += 1;
-
       (async () => {
         try {
-          setQueue((q) => q.map((it) => (it.id === nextItem.id ? { ...it, status: "compressing" } : it)));
-
-          const result = await compressImage(
-            nextItem.originalFile, 
-            nextItem.id, 
-            nextItem.category, 
-            nextItem.targetFormat
-          );
-
-          setQueue((q) =>
-            q.map((it) =>
-              it.id === nextItem.id
-                ? {
-                    ...it,
-                    status: "done",
-                    optimizedFile: result.optimizedFile,
-                    optimizedSize: result.optimizedSize,
-                    reductionRate: ((result.originalSize - result.optimizedSize) / result.originalSize) * 100,
-                  }
-                : it
-            )
-          );
-        } catch (error) {
-          setQueue((q) =>
-            q.map((it) =>
-              it.id === nextItem.id
-                ? { ...it, status: "error", error: error instanceof Error ? error.message : "Error" }
-                : it
-            )
-          );
+          setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "compressing" } : it));
+          const res = await compressImage(nextItem.originalFile, nextItem.id, nextItem.category, nextItem.targetFormat);
+          setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "done", optimizedFile: res.optimizedFile, optimizedSize: res.optimizedSize, reductionRate: ((res.originalSize - res.optimizedSize) / res.originalSize) * 100 } : it));
+        } catch (e) {
+          setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "error", error: e instanceof Error ? e.message : "Error" } : it));
         } finally {
           processingRef.current -= 1;
           processQueue();
         }
       })();
-
-      return prevQueue.map((it) => (it.id === nextItem.id ? { ...it, status: "uploading" } : it));
+      return prev.map(it => it.id === nextItem.id ? { ...it, status: "uploading" } : it);
     });
   }, []);
 
   useEffect(() => {
-    const queuedItems = queue.filter((item) => item.status === "queued");
-    if (queuedItems.length > 0 && processingRef.current < CONCURRENCY) {
-      processQueue();
-    }
+    if (queue.some(i => i.status === "queued") && processingRef.current < CONCURRENCY) processQueue();
   }, [queue, processQueue]);
 
-  const updateItemSettings = (id: string, updates: Partial<Pick<QueueItem, "category" | "targetFormat">>) => {
-    setQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
-  };
-
-  const isAllDone = queue.length > 0 && queue.every((item) => item.status === "done" || item.status === "error");
+  const isAllDone = queue.length > 0 && queue.every(i => i.status === "done" || i.status === "error");
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      {/* Global Settings UI */}
-      <div className="mb-8 bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-wrap gap-8 items-center">
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-bold text-gray-700">전체 최적화 카테고리</label>
-          <select 
-            value={globalCategory}
-            onChange={(e) => setGlobalCategory(e.target.value as ImageCategory)}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-[#0070f3]"
-          >
-            <option value="screenshot">스크린샷 (가독성 우선)</option>
-            <option value="photo">일반 사진 (용량 우선)</option>
-            <option value="web">웹 업로드용 (극단적 압축 + 리사이즈)</option>
-            <option value="high-quality">고화질 보관 (품질 우선)</option>
-          </select>
+    <div className="max-w-4xl mx-auto px-4">
+      {/* Settings Panel - Ultra Glass */}
+      <div className="glass-panel rounded-3xl p-8 mb-12 flex flex-wrap items-center gap-10">
+        <div className="flex-1 min-w-[240px]">
+          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Mode Configuration</h4>
+          <div className="grid grid-cols-2 gap-3">
+            {(['screenshot', 'photo', 'web', 'high-quality'] as const).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setGlobalCategory(cat)}
+                className={`px-4 py-2.5 rounded-xl text-[13px] font-bold border transition-all ${
+                  globalCategory === cat 
+                    ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20" 
+                    : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                }`}
+              >
+                {cat === 'screenshot' && 'Screenshot'}
+                {cat === 'photo' && 'Photography'}
+                {cat === 'web' && 'Web Engine'}
+                {cat === 'high-quality' && 'Lossless'}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-bold text-gray-700">전체 변환 포맷</label>
-          <select 
-            value={globalFormat}
-            onChange={(e) => setGlobalFormat(e.target.value as OutputFormat)}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-[#0070f3]"
-          >
-            <option value="original">원본 포맷 유지</option>
-            <option value="png">PNG로 변환</option>
-            <option value="jpeg">JPG로 변환</option>
-          </select>
-        </div>
-        <div className="ml-auto text-xs text-gray-400 max-w-[200px]">
-          * 설정 변경 후 파일을 업로드하면 해당 설정이 적용됩니다. 대기열 내 개별 수정도 가능합니다.
+        
+        <div className="flex-1 min-w-[200px]">
+          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Output Format</h4>
+          <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10">
+            {(['original', 'png', 'jpeg'] as const).map((fmt) => (
+              <button
+                key={fmt}
+                onClick={() => setGlobalFormat(fmt)}
+                className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${
+                  globalFormat === fmt ? "bg-white text-slate-900" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                {fmt.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Drop Zone */}
+      {/* Drop Zone - High Contrast & Glow */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
         onClick={() => document.getElementById("fileInput")?.click()}
-        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-          isDragging ? "border-[#0070f3] bg-blue-50" : "border-gray-200 hover:border-[#0070f3] hover:bg-gray-50"
+        className={`group relative rounded-[40px] p-20 text-center transition-all cursor-pointer border-2 border-white/5 ${
+          isDragging ? "animate-glow bg-blue-500/5 scale-[0.98]" : "bg-slate-950/40 hover:bg-slate-900/40 hover:border-white/10"
         }`}
       >
         <input id="fileInput" type="file" multiple accept=".png,.jpg,.jpeg" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-        <p className="text-lg font-medium text-gray-900 mb-1">파일을 드래그하거나 클릭하여 선택하세요.</p>
-        <p className="text-sm text-gray-500">PNG, JPG 지원 (최대 10개, 각 20MB)</p>
+        <div className="relative pointer-events-none">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-500/20 group-hover:scale-110 transition-transform">
+            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </div>
+          <h3 className="text-3xl font-black text-white tracking-tighter mb-3">DROP ASSETS HERE.</h3>
+          <p className="text-slate-500 font-bold text-sm tracking-tight uppercase opacity-60">Max 20MB / PNG, JPG, JPEG</p>
+        </div>
       </div>
 
-      <p className="mt-4 text-center text-xs text-gray-400">
-        🔒 이미지는 압축 처리 중에만 서버 메모리에 임시 존재하며 즉시 삭제됩니다.
-      </p>
-
-      {/* Queue Table */}
+      {/* Queue List */}
       {queue.length > 0 && (
-        <div className="mt-12">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">처리 대기열</h2>
+        <div className="mt-20">
+          <div className="flex justify-between items-center mb-10">
+            <h2 className="text-2xl font-black text-white tracking-tighter uppercase">Processing Queue</h2>
             {isAllDone && (
-              <button onClick={() => downloadAllAsZip(queue)} className="bg-[#0070f3] text-white px-5 py-2 rounded-md text-sm font-bold hover:bg-blue-600 transition-colors">
-                ZIP 일괄 다운로드
+              <button onClick={() => downloadAllAsZip(queue)} className="px-8 py-3 bg-white text-slate-950 rounded-2xl text-sm font-black hover:scale-105 active:scale-95 transition-all shadow-xl shadow-white/5">
+                EXPORT ALL (.ZIP)
               </button>
             )}
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-4 text-left font-bold text-gray-600">파일명 / 설정</th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-600">원본</th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-600">결과</th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-600">절감률</th>
-                  <th className="px-6 py-4 text-left font-bold text-gray-600">상태</th>
-                  <th className="px-6 py-4 text-right font-bold text-gray-600">작업</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {queue.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900 truncate max-w-[180px]" title={item.originalFile.name}>
-                        {item.originalFile.name}
-                      </div>
-                      {item.status === "queued" && (
-                        <div className="flex gap-2 mt-2">
-                          <select 
-                            value={item.category} 
-                            onChange={(e) => updateItemSettings(item.id, { category: e.target.value as ImageCategory })}
-                            className="text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-white outline-none"
-                          >
-                            <option value="screenshot">스크린샷</option>
-                            <option value="photo">사진</option>
-                            <option value="web">웹용</option>
-                            <option value="high-quality">고화질</option>
-                          </select>
-                          <select 
-                            value={item.targetFormat} 
-                            onChange={(e) => updateItemSettings(item.id, { targetFormat: e.target.value as OutputFormat })}
-                            className="text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-white outline-none"
-                          >
-                            <option value="original">Original</option>
-                            <option value="png">PNG</option>
-                            <option value="jpeg">JPG</option>
-                          </select>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatSize(item.originalSize)}</td>
-                    <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
-                      {item.optimizedSize ? formatSize(item.optimizedSize) : "-"}
-                    </td>
-                    <td className="px-6 py-4">
-                      {item.reductionRate !== undefined ? (
-                        <span className="text-green-600 font-bold bg-green-50 px-2 py-1 rounded">
-                          -{item.reductionRate.toFixed(1)}%
-                        </span>
-                      ) : "-"}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={item.status} error={item.error} />
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {item.status === "done" && (
-                        <button onClick={() => downloadSingle(item)} className="text-[#0070f3] hover:underline font-bold">
-                          다운로드
-                        </button>
-                      )}
-                      {item.status === "queued" && (
-                         <button onClick={() => setQueue(q => q.filter(i => i.id !== item.id))} className="text-gray-400 hover:text-red-500 text-xs">
-                           삭제
-                         </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-4">
+            {queue.map((item) => (
+              <div key={item.id} className="glass-card rounded-[32px] p-6 flex items-center gap-6 animate-slide-up">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-4 mb-2">
+                    <span className="text-lg font-black text-white truncate">{item.originalFile.name}</span>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  <div className="flex gap-4 text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                    <span>In: {formatSize(item.originalSize)}</span>
+                    {item.optimizedSize && <span className="text-blue-400">Out: {formatSize(item.optimizedSize)}</span>}
+                  </div>
+                </div>
+
+                <div className="text-right hidden sm:block">
+                  <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Savings</div>
+                  <div className={`text-2xl font-black ${item.reductionRate !== undefined ? "text-green-500" : "text-slate-800"}`}>
+                    {item.reductionRate !== undefined ? `-${item.reductionRate.toFixed(1)}%` : "00.0%"}
+                  </div>
+                </div>
+
+                <div className="w-px h-10 bg-white/5 mx-2 hidden sm:block"></div>
+
+                <div>
+                  {item.status === "done" ? (
+                    <button onClick={() => downloadSingle(item)} className="p-4 bg-white/5 hover:bg-white text-white hover:text-slate-950 rounded-2xl transition-all group/btn">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    </button>
+                  ) : item.status === "queued" ? (
+                    <button onClick={() => setQueue(q => q.filter(i => i.id !== item.id))} className="p-4 text-slate-600 hover:text-red-500 transition-colors">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  ) : (
+                    <div className="w-10 h-10 border-4 border-white/5 border-t-blue-500 rounded-full animate-spin"></div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -273,29 +192,17 @@ export default function ImageOptimizer() {
   );
 }
 
-function StatusBadge({ status, error }: { status: QueueStatus; error?: string }) {
+function StatusBadge({ status }: { status: QueueStatus }) {
   const styles = {
-    queued: "bg-gray-100 text-gray-600",
-    uploading: "bg-blue-100 text-blue-600 animate-pulse",
-    compressing: "bg-yellow-100 text-yellow-600 animate-pulse",
-    done: "bg-green-100 text-green-600",
-    error: "bg-red-100 text-red-600",
+    queued: "text-slate-600",
+    uploading: "text-blue-500 animate-pulse",
+    compressing: "text-amber-500 animate-pulse",
+    done: "text-green-500",
+    error: "text-red-500",
   };
-
-  const labels = {
-    queued: "대기 중",
-    uploading: "업로드 중",
-    compressing: "압축 중",
-    done: "완료",
-    error: "실패",
-  };
-
   return (
-    <div className="flex items-center gap-2">
-      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${styles[status]}`}>
-        {labels[status]}
-      </span>
-      {status === "error" && <span className="text-[10px] text-red-500" title={error}>(!)</span>}
-    </div>
+    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${styles[status]}`}>
+      {status}
+    </span>
   );
 }

@@ -2,24 +2,38 @@ import ImageOptimizer from "@/components/ImageOptimizer";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="bg-white border-b border-gray-200 py-8">
-        <div className="max-w-5xl mx-auto px-4">
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            이미지 최적화 도구
+    <main className="relative min-h-screen text-slate-50 selection:bg-blue-500/30">
+      {/* Background Mesh */}
+      <div className="mesh-gradient" />
+      
+      <header className="relative pt-20 pb-12 overflow-hidden">
+        <div className="max-w-5xl mx-auto px-4 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold tracking-widest uppercase mb-6 animate-fade-in">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+            </span>
+            Next-Gen Optimizer
+          </div>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-4 bg-gradient-to-b from-white to-slate-400 bg-clip-text text-transparent">
+            PIXEL PERFECT.
           </h1>
-          <p className="mt-2 text-lg text-gray-500 font-sans">
-            Next.js 기반 고성능 서버리스 이미지 압축 도구
+          <p className="max-w-2xl mx-auto text-lg md:text-xl text-slate-400 font-medium leading-relaxed">
+            AI-Driven 이미지 최적화 엔진. <br/>
+            초고화질을 유지하며 용량만 드라마틱하게 제거합니다.
           </p>
         </div>
       </header>
 
-      <div className="py-12">
+      <section className="relative z-10">
         <ImageOptimizer />
-      </div>
+      </section>
 
-      <footer className="max-w-5xl mx-auto px-4 py-12 text-center text-gray-400 text-sm font-sans">
-        &copy; {new Date().getFullYear()} Image Optimizer Tool. Built with Next.js & Sharp.
+      <footer className="max-w-5xl mx-auto px-4 py-20 text-center border-t border-white/5 mt-20">
+        <div className="text-slate-500 text-sm font-medium tracking-tight">
+          &copy; {new Date().getFullYear()} OptiStream Engine. <br/>
+          <span className="text-slate-600 mt-2 block text-xs">Powered by Vercel Edge & Sharp Optimization.</span>
+        </div>
       </footer>
     </main>
   );
