@@ -1,12 +1,13 @@
-import { CompressionChunk, CompressionResponse } from "@/types/image";
+import { CompressionChunk, CompressionResponse, ImageCategory, OutputFormat } from "@/types/image";
 
-const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB for safer Vercel payload limit
+const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
 
 export async function compressImage(
   file: File,
-  id: string
+  id: string,
+  category: ImageCategory,
+  targetFormat: OutputFormat
 ): Promise<{ optimizedFile: File; originalSize: number; optimizedSize: number }> {
-  console.log(`Starting compression for ${file.name} (${id})`);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -14,15 +15,11 @@ export async function compressImage(
       const totalChunks = Math.ceil(base64.length / CHUNK_SIZE);
       let finalResponse: CompressionResponse | null = null;
 
-      console.log(`File converted to Base64. Total chunks to send: ${totalChunks}`);
-
       try {
         for (let i = 0; i < totalChunks; i++) {
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, base64.length);
           const chunkData = base64.substring(start, end);
-
-          console.log(`Uploading chunk ${i + 1}/${totalChunks}...`);
 
           const chunk: CompressionChunk = {
             id,
@@ -31,6 +28,8 @@ export async function compressImage(
             data: chunkData,
             filename: file.name,
             mimeType: file.type,
+            category,
+            targetFormat,
           };
 
           const response = await fetch("/api/compress", {
@@ -41,40 +40,31 @@ export async function compressImage(
 
           if (!response.ok) {
             const errorData = await response.json();
-            console.error(`Chunk ${i + 1} failed:`, errorData);
             return reject(new Error(errorData.error || `Failed to upload chunk ${i + 1}/${totalChunks}`));
           }
 
           const responseData = await response.json();
-          console.log(`Chunk ${i + 1} response:`, responseData.message || "Final result received");
-          
           if (i === totalChunks - 1) {
             finalResponse = responseData;
           }
         }
       } catch (err) {
-        console.error("Error during chunk upload:", err);
         return reject(new Error("Network error during upload"));
       }
 
       if (finalResponse && finalResponse.success && finalResponse.data) {
-        console.log("Compression successful, processing result...");
         const byteCharacters = atob(finalResponse.data);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
           byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
         const byteArray = new Uint8Array(byteNumbers);
-        const optimizedBlob = new Blob([byteArray], { type: file.type });
+        
+        const outputMime = finalResponse.outputFilename.endsWith(".png") ? "image/png" : "image/jpeg";
+        const optimizedBlob = new Blob([byteArray], { type: outputMime });
 
-        // 22. Filename Rule: 원본명.optimized.ext
-        const dotIndex = file.name.lastIndexOf(".");
-        const name = file.name.substring(0, dotIndex);
-        const ext = file.name.substring(dotIndex + 1);
-        const optimizedFilename = `${name}.optimized.${ext}`;
-
-        const optimizedFile = new File([optimizedBlob], optimizedFilename, {
-          type: file.type,
+        const optimizedFile = new File([optimizedBlob], finalResponse.outputFilename, {
+          type: outputMime,
         });
 
         resolve({

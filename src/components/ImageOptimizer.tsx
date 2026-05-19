@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { QueueItem, QueueStatus } from "@/types/image";
+import { QueueItem, QueueStatus, ImageCategory, OutputFormat } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 
@@ -12,6 +12,11 @@ const CONCURRENCY = 2;
 export default function ImageOptimizer() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Global Settings
+  const [globalCategory, setGlobalCategory] = useState<ImageCategory>("screenshot");
+  const [globalFormat, setGlobalFormat] = useState<OutputFormat>("original");
+
   const processingRef = useRef<number>(0);
 
   const formatSize = (bytes: number) => {
@@ -26,7 +31,6 @@ export default function ImageOptimizer() {
     (files: FileList | File[]) => {
       const fileArray = Array.from(files);
 
-      // 8. Upload Policy: Max 10 files
       if (queue.length + fileArray.length > MAX_FILES) {
         alert(`최대 ${MAX_FILES}개의 파일만 업로드할 수 있습니다.`);
         return;
@@ -35,13 +39,11 @@ export default function ImageOptimizer() {
       const newItems: QueueItem[] = [];
 
       for (const file of fileArray) {
-        // 7. Support Formats
         if (!["image/jpeg", "image/jpg", "image/png"].includes(file.type)) {
           alert(`${file.name}은(는) 지원하지 않는 형식입니다.`);
           continue;
         }
 
-        // 8. Max File Size: 20MB
         if (file.size > MAX_FILE_SIZE) {
           alert(`${file.name}의 크기가 20MB를 초과합니다.`);
           continue;
@@ -52,12 +54,14 @@ export default function ImageOptimizer() {
           originalFile: file,
           originalSize: file.size,
           status: "queued",
+          category: globalCategory,
+          targetFormat: globalFormat,
         });
       }
 
       setQueue((prev) => [...prev, ...newItems]);
     },
-    [queue.length]
+    [queue.length, globalCategory, globalFormat]
   );
 
   const processQueue = useCallback(async () => {
@@ -69,15 +73,16 @@ export default function ImageOptimizer() {
 
       processingRef.current += 1;
 
-      // Start processing in the background
       (async () => {
         try {
-          // Update status to compressing
-          setQueue((q) =>
-            q.map((it) => (it.id === nextItem.id ? { ...it, status: "compressing" } : it))
-          );
+          setQueue((q) => q.map((it) => (it.id === nextItem.id ? { ...it, status: "compressing" } : it)));
 
-          const result = await compressImage(nextItem.originalFile, nextItem.id);
+          const result = await compressImage(
+            nextItem.originalFile, 
+            nextItem.id, 
+            nextItem.category, 
+            nextItem.targetFormat
+          );
 
           setQueue((q) =>
             q.map((it) =>
@@ -87,8 +92,7 @@ export default function ImageOptimizer() {
                     status: "done",
                     optimizedFile: result.optimizedFile,
                     optimizedSize: result.optimizedSize,
-                    reductionRate:
-                      ((result.originalSize - result.optimizedSize) / result.originalSize) * 100,
+                    reductionRate: ((result.originalSize - result.optimizedSize) / result.originalSize) * 100,
                   }
                 : it
             )
@@ -97,23 +101,17 @@ export default function ImageOptimizer() {
           setQueue((q) =>
             q.map((it) =>
               it.id === nextItem.id
-                ? {
-                    ...it,
-                    status: "error",
-                    error: error instanceof Error ? error.message : "Error",
-                  }
+                ? { ...it, status: "error", error: error instanceof Error ? error.message : "Error" }
                 : it
             )
           );
         } finally {
           processingRef.current -= 1;
-          processQueue(); // Trigger next
+          processQueue();
         }
       })();
 
-      return prevQueue.map((it) =>
-        it.id === nextItem.id ? { ...it, status: "uploading" } : it
-      );
+      return prevQueue.map((it) => (it.id === nextItem.id ? { ...it, status: "uploading" } : it));
     });
   }, []);
 
@@ -124,134 +122,144 @@ export default function ImageOptimizer() {
     }
   }, [queue, processQueue]);
 
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
+  const updateItemSettings = (id: string, updates: Partial<Pick<QueueItem, "category" | "targetFormat">>) => {
+    setQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
   };
 
-  const onDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFiles(e.dataTransfer.files);
-  };
-
-  const isAllDone =
-    queue.length > 0 && queue.every((item) => item.status === "done" || item.status === "error");
+  const isAllDone = queue.length > 0 && queue.every((item) => item.status === "done" || item.status === "error");
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
-      {/* 17. Drop Zone UI */}
-      <div
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        onClick={() => document.getElementById("fileInput")?.click()}
-        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-          isDragging
-            ? "border-[#0070f3] bg-blue-50"
-            : "border-gray-200 hover:border-[#0070f3] hover:bg-gray-50"
-        }`}
-      >
-        <input
-          id="fileInput"
-          type="file"
-          multiple
-          accept=".png,.jpg,.jpeg"
-          className="hidden"
-          onChange={(e) => e.target.files && handleFiles(e.target.files)}
-        />
-        <div className="mb-4">
-          <svg
-            className="w-12 h-12 mx-auto text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Global Settings UI */}
+      <div className="mb-8 bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-wrap gap-8 items-center">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-bold text-gray-700">전체 최적화 카테고리</label>
+          <select 
+            value={globalCategory}
+            onChange={(e) => setGlobalCategory(e.target.value as ImageCategory)}
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-[#0070f3]"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="Target: M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-            />
-          </svg>
+            <option value="screenshot">스크린샷 (가독성 우선)</option>
+            <option value="photo">일반 사진 (용량 우선)</option>
+            <option value="web">웹 업로드용 (극단적 압축 + 리사이즈)</option>
+            <option value="high-quality">고화질 보관 (품질 우선)</option>
+          </select>
         </div>
-        <p className="text-lg font-medium text-gray-900 mb-2">
-          여기에 최적화할 PNG / JPG 파일들을 드래그하거나 클릭하여 선택하세요.
-        </p>
-        <p className="text-sm text-gray-500">
-          캡처본 및 스크린샷 최적화에 특화된 고압축이 실행됩니다. (최대 10개, 단일 20MB)
-        </p>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-bold text-gray-700">전체 변환 포맷</label>
+          <select 
+            value={globalFormat}
+            onChange={(e) => setGlobalFormat(e.target.value as OutputFormat)}
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-[#0070f3]"
+          >
+            <option value="original">원본 포맷 유지</option>
+            <option value="png">PNG로 변환</option>
+            <option value="jpeg">JPG로 변환</option>
+          </select>
+        </div>
+        <div className="ml-auto text-xs text-gray-400 max-w-[200px]">
+          * 설정 변경 후 파일을 업로드하면 해당 설정이 적용됩니다. 대기열 내 개별 수정도 가능합니다.
+        </div>
       </div>
 
-      {/* 18. Security Note */}
+      {/* Drop Zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
+        onClick={() => document.getElementById("fileInput")?.click()}
+        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+          isDragging ? "border-[#0070f3] bg-blue-50" : "border-gray-200 hover:border-[#0070f3] hover:bg-gray-50"
+        }`}
+      >
+        <input id="fileInput" type="file" multiple accept=".png,.jpg,.jpeg" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+        <p className="text-lg font-medium text-gray-900 mb-1">파일을 드래그하거나 클릭하여 선택하세요.</p>
+        <p className="text-sm text-gray-500">PNG, JPG 지원 (최대 10개, 각 20MB)</p>
+      </div>
+
       <p className="mt-4 text-center text-xs text-gray-400">
-        🔒 이미지는 압축 처리 중에만 서버 메모리에 임시 존재하며,
-        <br />
-        처리 즉시 삭제됩니다. 서버에 저장되거나 기록되지 않습니다.
+        🔒 이미지는 압축 처리 중에만 서버 메모리에 임시 존재하며 즉시 삭제됩니다.
       </p>
 
-      {/* 19. Queue Table */}
+      {/* Queue Table */}
       {queue.length > 0 && (
         <div className="mt-12">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">처리 대기열 ({queue.length})</h2>
+            <h2 className="text-xl font-bold text-gray-900">처리 대기열</h2>
             {isAllDone && (
-              <button
-                onClick={() => downloadAllAsZip(queue)}
-                className="bg-[#0070f3] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-600 transition-colors"
-              >
+              <button onClick={() => downloadAllAsZip(queue)} className="bg-[#0070f3] text-white px-5 py-2 rounded-md text-sm font-bold hover:bg-blue-600 transition-colors">
                 ZIP 일괄 다운로드
               </button>
             )}
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-600">파일명</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-600">원본 용량</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-600">최적화 용량</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-600">절감률</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-600">상태</th>
-                  <th className="px-6 py-4 text-right font-semibold text-gray-600">다운로드</th>
+                  <th className="px-6 py-4 text-left font-bold text-gray-600">파일명 / 설정</th>
+                  <th className="px-6 py-4 text-left font-bold text-gray-600">원본</th>
+                  <th className="px-6 py-4 text-left font-bold text-gray-600">결과</th>
+                  <th className="px-6 py-4 text-left font-bold text-gray-600">절감률</th>
+                  <th className="px-6 py-4 text-left font-bold text-gray-600">상태</th>
+                  <th className="px-6 py-4 text-right font-bold text-gray-600">작업</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {queue.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 truncate max-w-[200px]" title={item.originalFile.name}>
-                      {item.originalFile.name}
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-gray-900 truncate max-w-[180px]" title={item.originalFile.name}>
+                        {item.originalFile.name}
+                      </div>
+                      {item.status === "queued" && (
+                        <div className="flex gap-2 mt-2">
+                          <select 
+                            value={item.category} 
+                            onChange={(e) => updateItemSettings(item.id, { category: e.target.value as ImageCategory })}
+                            className="text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-white outline-none"
+                          >
+                            <option value="screenshot">스크린샷</option>
+                            <option value="photo">사진</option>
+                            <option value="web">웹용</option>
+                            <option value="high-quality">고화질</option>
+                          </select>
+                          <select 
+                            value={item.targetFormat} 
+                            onChange={(e) => updateItemSettings(item.id, { targetFormat: e.target.value as OutputFormat })}
+                            className="text-[10px] border border-gray-200 rounded px-1 py-0.5 bg-white outline-none"
+                          >
+                            <option value="original">Original</option>
+                            <option value="png">PNG</option>
+                            <option value="jpeg">JPG</option>
+                          </select>
+                        </div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 text-gray-500">{formatSize(item.originalSize)}</td>
-                    <td className="px-6 py-4 text-gray-500">
+                    <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatSize(item.originalSize)}</td>
+                    <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
                       {item.optimizedSize ? formatSize(item.optimizedSize) : "-"}
                     </td>
                     <td className="px-6 py-4">
-                      {/* 20. Reduction Rate Style */}
                       {item.reductionRate !== undefined ? (
-                        <span className="text-green-600 font-bold">
+                        <span className="text-green-600 font-bold bg-green-50 px-2 py-1 rounded">
                           -{item.reductionRate.toFixed(1)}%
                         </span>
-                      ) : (
-                        "-"
-                      )}
+                      ) : "-"}
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={item.status} error={item.error} />
                     </td>
                     <td className="px-6 py-4 text-right">
                       {item.status === "done" && (
-                        <button
-                          onClick={() => downloadSingle(item)}
-                          className="text-[#0070f3] hover:underline font-medium"
-                        >
+                        <button onClick={() => downloadSingle(item)} className="text-[#0070f3] hover:underline font-bold">
                           다운로드
                         </button>
+                      )}
+                      {item.status === "queued" && (
+                         <button onClick={() => setQueue(q => q.filter(i => i.id !== item.id))} className="text-gray-400 hover:text-red-500 text-xs">
+                           삭제
+                         </button>
                       )}
                     </td>
                   </tr>
@@ -284,14 +292,10 @@ function StatusBadge({ status, error }: { status: QueueStatus; error?: string })
 
   return (
     <div className="flex items-center gap-2">
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
+      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${styles[status]}`}>
         {labels[status]}
       </span>
-      {status === "error" && (
-        <span className="text-xs text-red-500" title={error}>
-          (!)
-        </span>
-      )}
+      {status === "error" && <span className="text-[10px] text-red-500" title={error}>(!)</span>}
     </div>
   );
 }
