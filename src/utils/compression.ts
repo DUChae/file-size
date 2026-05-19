@@ -1,11 +1,12 @@
 import { CompressionChunk, CompressionResponse } from "@/types/image";
 
-const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB
+const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB for safer Vercel payload limit
 
 export async function compressImage(
   file: File,
   id: string
 ): Promise<{ optimizedFile: File; originalSize: number; optimizedSize: number }> {
+  console.log(`Starting compression for ${file.name} (${id})`);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -13,11 +14,15 @@ export async function compressImage(
       const totalChunks = Math.ceil(base64.length / CHUNK_SIZE);
       let finalResponse: CompressionResponse | null = null;
 
+      console.log(`File converted to Base64. Total chunks to send: ${totalChunks}`);
+
       try {
         for (let i = 0; i < totalChunks; i++) {
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, base64.length);
           const chunkData = base64.substring(start, end);
+
+          console.log(`Uploading chunk ${i + 1}/${totalChunks}...`);
 
           const chunk: CompressionChunk = {
             id,
@@ -36,11 +41,13 @@ export async function compressImage(
 
           if (!response.ok) {
             const errorData = await response.json();
-            console.error("Chunk upload failed:", errorData);
+            console.error(`Chunk ${i + 1} failed:`, errorData);
             return reject(new Error(errorData.error || `Failed to upload chunk ${i + 1}/${totalChunks}`));
           }
 
           const responseData = await response.json();
+          console.log(`Chunk ${i + 1} response:`, responseData.message || "Final result received");
+          
           if (i === totalChunks - 1) {
             finalResponse = responseData;
           }
@@ -51,6 +58,7 @@ export async function compressImage(
       }
 
       if (finalResponse && finalResponse.success && finalResponse.data) {
+        console.log("Compression successful, processing result...");
         const byteCharacters = atob(finalResponse.data);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
