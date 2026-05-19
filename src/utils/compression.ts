@@ -11,6 +11,7 @@ export async function compressImage(
     reader.onload = async (e) => {
       const base64 = (e.target?.result as string).split(",")[1];
       const totalChunks = Math.ceil(base64.length / CHUNK_SIZE);
+      let finalResponse: CompressionResponse | null = null;
 
       try {
         for (let i = 0; i < totalChunks; i++) {
