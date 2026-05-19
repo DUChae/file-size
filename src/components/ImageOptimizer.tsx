@@ -70,17 +70,17 @@ export default function ImageOptimizer() {
   const isAllDone = queue.length > 0 && queue.every(i => i.status === "done" || i.status === "error");
 
   return (
-    <div className="max-w-4xl mx-auto px-4">
+    <div className="max-w-6xl mx-auto px-4">
       {/* Settings Panel - Ultra Glass */}
-      <div className="glass-panel rounded-3xl p-8 mb-12 flex flex-wrap items-start gap-10">
-        <div className="flex-2 min-w-[300px]">
+      <div className="glass-panel rounded-3xl p-8 mb-12 flex flex-col md:flex-row items-start gap-10">
+        <div className="flex-[1.4] w-full">
           <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Mode Configuration</h4>
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             {(['screenshot', 'photo', 'web', 'high-quality'] as const).map((cat) => (
               <button
                 key={cat}
                 onClick={() => setGlobalCategory(cat)}
-                className={`px-4 py-2.5 rounded-xl text-[13px] font-bold border transition-all ${
+                className={`px-3 py-2.5 rounded-xl text-[12px] font-bold border transition-all ${
                   globalCategory === cat 
                     ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20" 
                     : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
@@ -93,7 +93,7 @@ export default function ImageOptimizer() {
               </button>
             ))}
           </div>
-          <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-4">
+          <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-4 min-h-[70px] flex items-center">
             <p className="text-[13px] text-blue-200 leading-relaxed font-medium">
               {globalCategory === 'screenshot' && "📄 텍스트 가독성을 유지하며 배경 용량을 극단적으로 줄입니다. (PNG 최적화 특화)"}
               {globalCategory === 'photo' && "🖼️ 풍경이나 인물 사진의 질감을 살리면서 용량을 효율적으로 압축합니다. (JPEG/JPG 특화)"}
@@ -103,14 +103,14 @@ export default function ImageOptimizer() {
           </div>
         </div>
         
-        <div className="flex-1 min-w-[200px]">
+        <div className="flex-1 w-full">
           <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Output Format</h4>
           <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-6">
             {(['original', 'png', 'jpeg'] as const).map((fmt) => (
               <button
                 key={fmt}
                 onClick={() => setGlobalFormat(fmt)}
-                className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${
+                className={`flex-1 py-2 rounded-xl text-[11px] font-black transition-all ${
                   globalFormat === fmt ? "bg-white text-slate-900" : "text-slate-500 hover:text-slate-300"
                 }`}
               >
@@ -118,7 +118,7 @@ export default function ImageOptimizer() {
               </button>
             ))}
           </div>
-          <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
+          <div className="bg-white/5 border border-white/5 rounded-2xl p-4 min-h-[70px] flex items-center">
             <p className="text-[13px] text-slate-300 leading-relaxed font-medium">
               {globalFormat === 'original' && "• 업로드한 파일의 확장자를 그대로 유지합니다."}
               {globalFormat === 'png' && "• 투명도가 필요하거나 선명한 텍스트가 중요한 경우 권장합니다."}
