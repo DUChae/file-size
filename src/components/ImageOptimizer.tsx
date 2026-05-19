@@ -72,10 +72,10 @@ export default function ImageOptimizer() {
   return (
     <div className="max-w-4xl mx-auto px-4">
       {/* Settings Panel - Ultra Glass */}
-      <div className="glass-panel rounded-3xl p-8 mb-12 flex flex-wrap items-center gap-10">
-        <div className="flex-1 min-w-[240px]">
+      <div className="glass-panel rounded-3xl p-8 mb-12 flex flex-wrap items-start gap-10">
+        <div className="flex-2 min-w-[300px]">
           <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Mode Configuration</h4>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 mb-4">
             {(['screenshot', 'photo', 'web', 'high-quality'] as const).map((cat) => (
               <button
                 key={cat}
@@ -93,11 +93,17 @@ export default function ImageOptimizer() {
               </button>
             ))}
           </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed italic">
+            {globalCategory === 'screenshot' && "• 텍스트 가독성을 유지하며 배경 용량을 극단적으로 줄입니다. (PNG 최적화)"}
+            {globalCategory === 'photo' && "• 풍경이나 인물 사진의 질감을 살리면서 용량을 효율적으로 압축합니다. (JPEG 특화)"}
+            {globalCategory === 'web' && "• 빠른 웹 로딩을 위해 품질과 크기를 공격적으로 조정합니다. (최대 1200px 제한)"}
+            {globalCategory === 'high-quality' && "• 육안상 손실 없이 불필요한 데이터만 제거하여 원본 품질을 보관합니다."}
+          </p>
         </div>
         
         <div className="flex-1 min-w-[200px]">
           <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Output Format</h4>
-          <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10">
+          <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-4">
             {(['original', 'png', 'jpeg'] as const).map((fmt) => (
               <button
                 key={fmt}
@@ -110,6 +116,11 @@ export default function ImageOptimizer() {
               </button>
             ))}
           </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            {globalFormat === 'original' && "• 업로드한 파일의 확장자를 그대로 유지합니다."}
+            {globalFormat === 'png' && "• 투명도가 필요하거나 선명한 텍스트가 중요한 경우 권장합니다."}
+            {globalFormat === 'jpeg' && "• 색상이 화려한 사진의 용량을 줄일 때 가장 효율적입니다."}
+          </p>
         </div>
       </div>
 
