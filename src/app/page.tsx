@@ -5,7 +5,7 @@ export default function Home() {
     <main className="relative min-h-screen text-slate-50 selection:bg-blue-500/30">
       {/* Background Mesh */}
       <div className="mesh-gradient" />
-      
+
       <header className="relative pt-20 pb-12 overflow-hidden">
         <div className="max-w-5xl mx-auto px-4 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold tracking-widest uppercase mb-6 animate-fade-in">
@@ -19,8 +19,8 @@ export default function Home() {
             PIXEL PERFECT.
           </h1>
           <p className="max-w-2xl mx-auto text-lg md:text-xl text-slate-400 font-medium leading-relaxed">
-            AI-Driven 이미지 최적화 엔진. <br/>
-            초고화질을 유지하며 용량만 드라마틱하게 제거합니다.
+            이미지 최적화 엔진. <br />
+            초고화질을 유지하며 용량만 제거
           </p>
         </div>
       </header>
@@ -31,8 +31,8 @@ export default function Home() {
 
       <footer className="max-w-5xl mx-auto px-4 py-20 text-center border-t border-white/5 mt-20">
         <div className="text-slate-500 text-sm font-medium tracking-tight">
-          &copy; {new Date().getFullYear()} OptiStream Engine. <br/>
-          <span className="text-slate-600 mt-2 block text-xs">Powered by Vercel Edge & Sharp Optimization.</span>
+          &copy; {new Date().getFullYear()} OptiStream Engine. <br />
+          <span className="text-slate-600 mt-2 block text-xs">Built by DU.</span>
         </div>
       </footer>
     </main>
