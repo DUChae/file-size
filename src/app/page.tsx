@@ -16,11 +16,11 @@ export default function Home() {
             OptiStream
           </div>
           <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-4 bg-gradient-to-b from-white to-slate-400 bg-clip-text text-transparent">
-            PIXEL PERFECT.
+            File Optimizer.
           </h1>
           <p className="max-w-2xl mx-auto text-lg md:text-xl text-slate-400 font-medium leading-relaxed">
             이미지 최적화 엔진. <br />
-            초고화질을 유지하며 용량만 제거
+            화질을 유지하며 용량만 제거
           </p>
         </div>
       </header>
@@ -32,7 +32,9 @@ export default function Home() {
       <footer className="max-w-5xl mx-auto px-4 py-20 text-center border-t border-white/5 mt-20">
         <div className="text-slate-500 text-sm font-medium tracking-tight">
           &copy; {new Date().getFullYear()} OptiStream Engine. <br />
-          <span className="text-slate-600 mt-2 block text-xs">Built by DU.</span>
+          <span className="text-slate-600 mt-2 block text-xs">
+            Built by DU.
+          </span>
         </div>
       </footer>
     </main>
