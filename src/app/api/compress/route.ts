@@ -2,23 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { CompressionChunk, CompressionResponse } from "@/types/image";
 
-const chunkMap = new Map<string, string[]>();
+import { redis } from "@/lib/redis";
+
+const CHUNK_TTL = 60 * 10; // 10 minutes
 
 export async function POST(req: NextRequest) {
   try {
     const chunk: CompressionChunk = await req.json();
     const { id, index, total, data, filename, mimeType, category, targetFormat } = chunk;
 
-    if (!chunkMap.has(id)) {
-      chunkMap.set(id, new Array(total).fill(""));
-    }
+    const redisKey = `image_chunks:${id}`;
+    
+    // Store the chunk in a Redis Hash
+    await redis.hset(redisKey, { [index]: data });
+    
+    // Set/Refresh TTL
+    await redis.expire(redisKey, CHUNK_TTL);
 
-    const chunks = chunkMap.get(id)!;
-    chunks[index] = data;
+    // Check how many chunks we have so far
+    const currentCount = await redis.hlen(redisKey);
 
-    if (chunks.every((c) => c !== "")) {
-      const fullBase64 = chunks.join("");
-      chunkMap.delete(id);
+    if (currentCount === total) {
+      // Retrieve all chunks
+      const allChunks = await redis.hgetall<Record<string, string>>(redisKey);
+      
+      if (!allChunks) {
+        throw new Error("Failed to retrieve chunks from Redis");
+      }
+
+      // Ensure they are in the correct order and joined
+      const sortedChunks = Object.entries(allChunks)
+        .sort(([a], [b]) => parseInt(a) - parseInt(b))
+        .map(([, val]) => val);
+      
+      const fullBase64 = sortedChunks.join("");
+      
+      // Clean up Redis
+      await redis.del(redisKey);
 
       const inputBuffer = Buffer.from(fullBase64, "base64");
       const originalSize = inputBuffer.length;
