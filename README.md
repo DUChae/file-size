@@ -1,58 +1,127 @@
-# OptiStream: High-Performance Serverless Image Optimization Engine
+# OptiStream
 
-OptiStream은 Next.js 14+와 고성능 이미지 처리 엔진인 **Sharp**를 결합하여 웹 환경에 최적화된 고압축 이미지 처리 도구입니다. 서버리스 환경의 물리적 제약을 극복하고, 시각적 품질은 유지하면서 웹 서비스의 성능(LCP)을 혁신적으로 개선하기 위해 개발되었습니다.
+Next.js 기반 파일 최적화 도구입니다. 현재는 두 가지 작업 모드를 제공합니다.
 
-## 🌟 핵심 기술 하이라이트
+- `Image Optimizer`: PNG, JPG, JPEG 이미지 최적화
+- `PDF to PNG`: PDF 각 페이지를 PNG로 변환 후 ZIP으로 다운로드
 
-### 1. 지능형 청크 업로드 시스템 (Advanced Chunked Upload)
-Vercel Serverless Function의 4.5MB Payload 제한을 우회하기 위해 독자적인 아키텍처를 도입했습니다.
-*   **Recursive Chunking**: 클라이언트에서 대용량 파일을 1MB 단위의 Base64 스트링으로 분할 전송.
-*   **Stateless Reassembly**: 서버의 `Map` 객체를 활용한 메모리 내 조각 수집 및 최종 바이너리 합성.
-*   **Overhead Control**: Base64 인코딩 시 발생하는 약 33%의 용량 증가분을 고려한 안정적인 통신 설계.
+## 주요 기능
 
-### 2. 정밀 압축 전략 (Intelligent Compression)
-이미지의 시각적 품질은 유지하면서 바이너리 수준에서의 데이터 중복을 제거합니다.
-*   **PNG 최적화**: `Palette Reduction` 기술을 통해 색상 수를 256개로 최적화하여 투명도는 유지하되 용량은 최대 90% 이상 절감.
-*   **JPEG 최적화**: 동일 품질 대비 더 높은 압축률을 제공하는 `mozjpeg` 엔진을 사용하여 추가적인 용량 절감 수행.
-*   **Adaptive Resizing**: 4K 이상의 고해상도 이미지를 장치 환경에 맞춰 스마트하게 리사이징 (2560px / 2000px / 1200px).
+### 1. Image Optimizer
 
-### 3. 고성능 큐 관리 (Concurrency Queue Management)
-브라우저의 메인 스레드 점유를 방지하고 서버 부하를 안정적으로 관리합니다.
-*   **Concurrency Control**: 최대 2개의 병렬 작업만 허용하는 Promise 기반 풀(Pool) 구현.
-*   **State Machine**: `queued` → `uploading` → `compressing` → `done` 상태를 실시간으로 추적하여 유연한 UI 피드백 제공.
+- 지원 형식: `PNG`, `JPG`, `JPEG`
+- 파일당 최대 크기: `20MB`
+- 동시 처리: 최대 `2개`
+- 출력 형식:
+  - `ORIGINAL`
+  - `PNG`
+  - `JPEG`
 
-## 📈 성능 지표 (Performance Result)
-*   **고해상도 스크린샷 (10.7MB)** → **최적화 결과 (243KB)**: 약 **97.8% 용량 절감**
-*   **평균 처리 시간**: 2~4초 (청크 분할 및 서버리스 콜드 스타트 포함)
+#### 이미지 최적화 모드
 
-## 🚦 압축 프리셋 (Optimization Presets)
-*   **Screenshot**: 텍스트 엣지 보존 및 가독성 최우선 (품질 82).
-*   **Photography**: 자연스러운 그라데이션과 질감 보존 (품질 75).
-*   **Web Engine**: 로딩 속도 극대화를 위한 공격적 압축 (품질 65 + 리사이징).
-*   **High Quality**: 메타데이터 제거 및 무손실에 가까운 압축 (품질 92).
+- `Screenshot`
+  - 텍스트 가독성을 우선하는 스크린샷 최적화
+- `Photography`
+  - 일반 사진 중심 압축
+- `Web Engine`
+  - 웹 배포용 경량화 중심 처리
+  - `가로 px`, `세로 px`를 직접 입력 가능
+  - 예: `1200 x 1263`
+  - 두 값을 모두 입력하면 해당 크기 캔버스 안으로 `contain` 방식 리사이즈 적용
+  - 하나라도 비어 있으면 원본 비율 유지
+- `Lossless`
+  - 품질 손실을 최소화하는 보수적 최적화
 
-## 🛠 기술 스택
-*   **Frontend**: Next.js 14+ (App Router), TypeScript, Tailwind CSS
-*   **Engine**: Sharp (C++ 기반 고성능 이미지 프로세싱)
-*   **Utilities**: JSZip, FileSaver.js
-*   **Infrastructure**: Vercel (Serverless Functions)
+#### 처리 방식
 
-## ⚠️ 제약 사항 및 정책
-*   **파일 제한**: 최대 10개 파일, 단일 파일 최대 20MB.
-*   **지원 포맷**: JPG, JPEG, PNG 전용.
-*   **용량 역전 방지**: 압축 결과가 원본보다 클 경우 자동으로 원본 파일 유지.
-*   **보안**: 이미지는 서버 메모리에서만 임시 처리되며, 처리 즉시 삭제됩니다. (Zero-Disk Persistence)
+- 업로드는 `Vercel Blob` direct client upload 사용
+- 서버에서는 `sharp`로 최적화 수행
+- 결과 파일이 원본보다 더 크면 원본을 유지
+- 결과 파일은 Blob URL로 다운로드
 
-## 💻 로컬 개발 환경 설정
-1. 저장소 클론 및 패키지 설치
-   ```bash
-   npm install
-   ```
-2. 개발 서버 실행
-   ```bash
-   npm run dev
-   ```
-3. 브라우저에서 `http://localhost:3000` 접속
+### 2. PDF to PNG
 
-## 📄 라이선스
-이 프로젝트는 개인 포트폴리오 및 내부 도구용으로 제작되었습니다.
+- 지원 형식: `PDF`
+- 입력 PDF 최대 크기: `20MB`
+- 브라우저에서 PDF를 렌더링
+- 각 페이지를 PNG로 변환
+- 결과는 `ZIP` 파일 하나로 다운로드
+
+## 기술 스택
+
+- `Next.js 16`
+- `React 19`
+- `TypeScript`
+- `Tailwind CSS 4`
+- `sharp`
+- `@vercel/blob`
+- `pdfjs-dist`
+- `JSZip`
+- `file-saver`
+
+## 배포 전제
+
+이 프로젝트는 현재 `public Blob store` 기준으로 동작합니다.
+
+필수 환경변수:
+
+- `BLOB_READ_WRITE_TOKEN`
+- `BLOB_STORE_ID`
+
+주의사항:
+
+- `Production`과 로컬 환경변수는 같은 public Blob store를 가리켜야 합니다.
+- Blob 설정이 없으면 `/api/upload`, `/api/compress`가 정상 동작하지 않습니다.
+
+## 로컬 실행
+
+1. 의존성 설치
+
+```bash
+npm install
+```
+
+2. Vercel 환경변수 가져오기
+
+```bash
+vercel env pull
+```
+
+3. 개발 서버 실행
+
+```bash
+npm run dev
+```
+
+4. 브라우저 접속
+
+```txt
+http://localhost:3000
+```
+
+## 빌드
+
+```bash
+npm run build
+```
+
+## 현재 UX 구조
+
+- 상단 `Mode Configuration`에서 작업 모드 전환
+  - `Image Optimizer`
+  - `PDF to PNG`
+- 이미지 최적화 화면 내부에서 세부 최적화 모드 선택
+  - `Screenshot`
+  - `Photography`
+  - `Web Engine`
+  - `Lossless`
+
+## 제한 사항
+
+- 이미지 입력은 현재 `PNG/JPG/JPEG`만 지원합니다.
+- PDF to PNG 결과는 현재 항상 `ZIP`으로 내려갑니다.
+- 대용량 PDF는 입력 크기가 20MB 이하라도 페이지 수와 해상도에 따라 브라우저 메모리 사용량이 커질 수 있습니다.
+
+## 참고
+
+- 배포 관련 메모: [DEPLOYMENT.md](./DEPLOYMENT.md)
