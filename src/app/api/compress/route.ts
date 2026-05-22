@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { del, put } from "@vercel/blob";
 import sharp from "sharp";
 import { CompressionRequest, CompressionResponse } from "@/types/image";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 
 function parseWebSizeDimension(value: number | undefined, label: string) {
   if (value === undefined) {
@@ -22,6 +23,14 @@ export async function POST(req: NextRequest) {
     const payload: CompressionRequest = await req.json();
     const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webWidth, webHeight, uploadId } = payload;
     sourceUrl = requestSourceUrl;
+
+    await trackAnalyticsEvent({
+      type: "image_job_started",
+      status: "started",
+      tool: "image",
+      mode: category,
+      filename,
+    });
 
     const sourceResponse = await fetch(sourceUrl);
     if (!sourceResponse.ok) {
@@ -136,6 +145,15 @@ export async function POST(req: NextRequest) {
       multipart: finalBuffer.length > 5 * 1024 * 1024,
     });
 
+    await trackAnalyticsEvent({
+      type: "image_job_success",
+      status: "success",
+      tool: "image",
+      mode: category,
+      filename,
+      fileSize: originalSize,
+    });
+
     await del(sourceUrl);
     sourceUrl = null;
 
@@ -149,6 +167,13 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Compression error:", error);
+
+    await trackAnalyticsEvent({
+      type: "image_job_error",
+      status: "error",
+      tool: "image",
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
 
     if (sourceUrl) {
       try {

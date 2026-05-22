@@ -27,6 +27,18 @@ async function loadPdfjs() {
   return pdfjs;
 }
 
+async function trackPdfEvent(payload: Record<string, unknown>) {
+  try {
+    await fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // Ignore analytics failures in the client.
+  }
+}
+
 export default function PdfToPngConverter() {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "converting" | "done" | "error">("idle");
@@ -68,6 +80,14 @@ export default function PdfToPngConverter() {
 
     setStatus("converting");
     setError(null);
+
+    await trackPdfEvent({
+      type: "pdf_job_started",
+      status: "started",
+      tool: "pdf",
+      filename: file.name,
+      fileSize: file.size,
+    });
 
     try {
       const pdfjs = await loadPdfjs();
@@ -113,10 +133,31 @@ export default function PdfToPngConverter() {
 
       const content = await zip.generateAsync({ type: "blob" });
       saveAs(content, `${baseName}-png.zip`);
+
+      await trackPdfEvent({
+        type: "pdf_job_success",
+        status: "success",
+        tool: "pdf",
+        filename: file.name,
+        fileSize: file.size,
+        pageCount: pdf.numPages,
+      });
+
       setStatus("done");
     } catch (conversionError) {
+      const message = conversionError instanceof Error ? conversionError.message : "PDF 변환에 실패했습니다.";
+
+      await trackPdfEvent({
+        type: "pdf_job_error",
+        status: "error",
+        tool: "pdf",
+        filename: file.name,
+        fileSize: file.size,
+        error: message,
+      });
+
       setStatus("error");
-      setError(conversionError instanceof Error ? conversionError.message : "PDF 변환에 실패했습니다.");
+      setError(message);
     }
   };
 
@@ -126,7 +167,7 @@ export default function PdfToPngConverter() {
         <div className="max-w-2xl">
           <h2 className="text-2xl font-black text-white tracking-tighter uppercase mb-3">PDF to PNG</h2>
           <p className="text-sm text-slate-400 leading-relaxed">
-            PDF 각 페이지를 브라우저에서 렌더링한 뒤 PNG로 변환해서 ZIP 하나로 내려줍니다.
+            PDF 각 페이지를 브라우저에서 렌더링한 뒤 PNG로 변환하고 ZIP 파일로 내려줍니다.
           </p>
         </div>
 

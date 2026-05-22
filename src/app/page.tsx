@@ -1,13 +1,24 @@
 import ToolWorkspace from "@/components/ToolWorkspace";
+import VisitorTracker from "@/components/VisitorTracker";
+import Link from "next/link";
 
 export default function Home() {
   return (
     <main className="relative min-h-screen text-slate-50 selection:bg-blue-500/30">
+      <VisitorTracker />
       {/* Background Mesh */}
       <div className="mesh-gradient" />
 
       <header className="relative pt-20 pb-12 overflow-hidden">
         <div className="max-w-5xl mx-auto px-4 text-center">
+          <div className="flex justify-end mb-6">
+            <Link
+              href="/admin"
+              className="inline-flex items-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-200 hover:bg-white/10 transition-colors"
+            >
+              Dashboard
+            </Link>
+          </div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold tracking-widest uppercase mb-6 animate-fade-in">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
