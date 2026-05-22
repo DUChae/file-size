@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { del, get, put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 import sharp from "sharp";
 import { CompressionRequest, CompressionResponse } from "@/types/image";
 
@@ -11,12 +11,12 @@ export async function POST(req: NextRequest) {
     const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, uploadId } = payload;
     sourceUrl = requestSourceUrl;
 
-    const sourceResponse = await get(sourceUrl, { access: "private" });
-    if (!sourceResponse || sourceResponse.statusCode !== 200 || !sourceResponse.stream) {
+    const sourceResponse = await fetch(sourceUrl);
+    if (!sourceResponse.ok) {
       throw new Error("Failed to fetch source image");
     }
 
-    const sourceArrayBuffer = await new Response(sourceResponse.stream).arrayBuffer();
+    const sourceArrayBuffer = await sourceResponse.arrayBuffer();
     const inputBuffer = Buffer.from(sourceArrayBuffer);
     const originalSize = inputBuffer.length;
 
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
       outputMime === mimeType && outputBuffer.length >= originalSize ? inputBuffer : outputBuffer;
 
     const blob = await put(outputPathname, finalBuffer, {
-      access: "private",
+      access: "public",
       contentType: outputMime,
       addRandomSuffix: false,
       allowOverwrite: true,

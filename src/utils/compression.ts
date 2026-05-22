@@ -1,13 +1,6 @@
 import { upload } from "@vercel/blob/client";
 import { CompressionRequest, CompressionResponse, ImageCategory, OutputFormat } from "@/types/image";
 
-function buildBlobProxyUrl(url: string, filename?: string, download?: boolean) {
-  const search = new URLSearchParams({ url });
-  if (filename) search.set("filename", filename);
-  if (download) search.set("download", "1");
-  return `/api/blob?${search.toString()}`;
-}
-
 export async function compressImage(
   file: File,
   id: string,
@@ -21,7 +14,7 @@ export async function compressImage(
   optimizedSize: number;
 }> {
   const sourceBlob = await upload(`uploads/${id}-${file.name}`, file, {
-    access: "private",
+    access: "public",
     contentType: file.type,
     handleUploadUrl: "/api/upload",
     multipart: file.size > 5 * 1024 * 1024,
@@ -65,8 +58,8 @@ export async function compressImage(
 
   return {
     optimizedFilename: finalResponse.outputFilename,
-    optimizedUrl: buildBlobProxyUrl(finalResponse.outputUrl, finalResponse.outputFilename),
-    optimizedDownloadUrl: buildBlobProxyUrl(finalResponse.outputUrl, finalResponse.outputFilename, true),
+    optimizedUrl: finalResponse.outputUrl,
+    optimizedDownloadUrl: finalResponse.outputDownloadUrl,
     originalSize: finalResponse.originalSize,
     optimizedSize: finalResponse.optimizedSize,
   };
