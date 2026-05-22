@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { redis } from "@/lib/redis";
 
 const FEEDBACK_LIST_KEY = "feedback:submissions";
@@ -12,6 +13,13 @@ interface FeedbackPayload {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!redis) {
+      return NextResponse.json(
+        { success: false, error: "Feedback storage is not configured." },
+        { status: 503 },
+      );
+    }
+
     const payload = (await req.json()) as FeedbackPayload;
     const type = payload.type === "improvement" ? "improvement" : "bug";
     const title = payload.title?.trim();
@@ -39,12 +47,9 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    if (redis) {
-      await redis.lpush(FEEDBACK_LIST_KEY, JSON.stringify(entry));
-      await redis.ltrim(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
-    } else {
-      console.warn("Feedback submitted without Redis storage:", entry);
-    }
+    await redis.lpush(FEEDBACK_LIST_KEY, JSON.stringify(entry));
+    await redis.ltrim(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
+    revalidatePath("/admin");
 
     return NextResponse.json({ success: true });
   } catch (error) {

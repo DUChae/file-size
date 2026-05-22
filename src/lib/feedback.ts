@@ -1,4 +1,5 @@
 import { redis } from "@/lib/redis";
+import { unstable_noStore as noStore } from "next/cache";
 
 const FEEDBACK_LIST_KEY = "feedback:submissions";
 const MAX_FEEDBACK_ITEMS = 200;
@@ -12,6 +13,8 @@ export interface FeedbackSubmission {
 }
 
 export async function getFeedbackSubmissions(): Promise<FeedbackSubmission[]> {
+  noStore();
+
   if (!redis) {
     return [];
   }
