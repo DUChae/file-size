@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import {
   addFeedbackSubmission,
+  deleteFeedbackSubmission,
   getFeedbackStorageMode,
   getFeedbackSubmissions,
 } from "@/lib/feedback";
@@ -10,6 +11,10 @@ interface FeedbackPayload {
   type?: string;
   title?: string;
   details?: string;
+}
+
+interface FeedbackDeletePayload {
+  id?: string;
 }
 
 export async function GET() {
@@ -87,6 +92,44 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error: error instanceof Error ? error.message : "Failed to submit feedback.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    console.log("[feedback-api] delete request received");
+    const payload = (await req.json()) as FeedbackDeletePayload;
+    const id = payload.id?.trim();
+
+    if (!id) {
+      console.error("[feedback-api] delete validation failed: missing id");
+      return NextResponse.json(
+        { success: false, error: "Id is required." },
+        { status: 400 },
+      );
+    }
+
+    const deleted = await deleteFeedbackSubmission(id);
+    revalidatePath("/admin");
+    console.log("[feedback-api] delete completed", { id, deleted });
+
+    if (!deleted) {
+      return NextResponse.json(
+        { success: false, error: "Feedback item not found." },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[feedback-api] delete failed", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete feedback.",
       },
       { status: 500 },
     );

@@ -50,6 +50,33 @@ export async function addFeedbackSubmission(entry: FeedbackSubmission) {
   console.log("[feedback] submission saved", { id: entry.id });
 }
 
+export async function deleteFeedbackSubmission(id: string) {
+  if (!redis) {
+    console.error("[feedback] deleteFeedbackSubmission failed: Redis is not configured");
+    throw new Error("Feedback storage is not configured.");
+  }
+
+  console.log("[feedback] deleting submission", { id });
+  const submissions = await getFeedbackSubmissions();
+  const nextSubmissions = submissions.filter((submission) => submission.id !== id);
+
+  if (nextSubmissions.length === submissions.length) {
+    console.warn("[feedback] delete target not found", { id });
+    return false;
+  }
+
+  await redis.del(FEEDBACK_LIST_KEY);
+  if (nextSubmissions.length > 0) {
+    await redis.rpush(
+      FEEDBACK_LIST_KEY,
+      ...nextSubmissions.map((submission) => JSON.stringify(submission)),
+    );
+  }
+
+  console.log("[feedback] submission deleted", { id });
+  return true;
+}
+
 export async function getFeedbackSubmissions(): Promise<FeedbackSubmission[]> {
   noStore();
 
