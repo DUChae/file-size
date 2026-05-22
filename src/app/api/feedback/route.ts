@@ -10,12 +10,23 @@ interface FeedbackPayload {
 
 export async function POST(req: NextRequest) {
   try {
+    console.log("[feedback-api] request received");
     const payload = (await req.json()) as FeedbackPayload;
-    const type = payload.type === "improvement" ? "improvement" : "bug";
+    const type: "bug" | "improvement" =
+      payload.type === "improvement" ? "improvement" : "bug";
     const title = payload.title?.trim();
     const details = payload.details?.trim();
 
+    console.log("[feedback-api] payload parsed", {
+      type,
+      hasTitle: Boolean(title),
+      hasDetails: Boolean(details),
+      titleLength: title?.length ?? 0,
+      detailsLength: details?.length ?? 0,
+    });
+
     if (!title) {
+      console.error("[feedback-api] validation failed: missing title");
       return NextResponse.json(
         { success: false, error: "Title is required." },
         { status: 400 },
@@ -23,6 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!details) {
+      console.error("[feedback-api] validation failed: missing details");
       return NextResponse.json(
         { success: false, error: "Details are required." },
         { status: 400 },
@@ -38,10 +50,13 @@ export async function POST(req: NextRequest) {
     };
 
     await addFeedbackSubmission(entry);
+    console.log("[feedback-api] submission persisted", { id: entry.id });
     revalidatePath("/admin");
+    console.log("[feedback-api] /admin revalidated");
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("[feedback-api] submission failed", error);
     return NextResponse.json(
       {
         success: false,
