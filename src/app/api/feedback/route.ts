@@ -1,11 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { addFeedbackSubmission } from "@/lib/feedback";
+import {
+  addFeedbackSubmission,
+  getFeedbackStorageMode,
+  getFeedbackSubmissions,
+} from "@/lib/feedback";
 
 interface FeedbackPayload {
   type?: string;
   title?: string;
   details?: string;
+}
+
+export async function GET() {
+  try {
+    const feedback = await getFeedbackSubmissions();
+    return NextResponse.json({
+      success: true,
+      feedback,
+      storageMode: getFeedbackStorageMode(),
+    });
+  } catch (error) {
+    console.error("[feedback-api] loading feedback failed", error);
+    return NextResponse.json(
+      {
+        success: false,
+        feedback: [],
+        storageMode: getFeedbackStorageMode(),
+        error: error instanceof Error ? error.message : "Failed to load feedback.",
+      },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {

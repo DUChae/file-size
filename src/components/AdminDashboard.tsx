@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -20,6 +20,7 @@ import { FeedbackSubmission } from "@/lib/feedback";
 
 type RangeKey = "7d" | "30d" | "365d";
 type AdminTab = "analytics" | "feedback";
+type FeedbackStorageMode = "redis" | "unconfigured";
 
 function formatTimestamp(value: string) {
   try {
@@ -85,7 +86,7 @@ function ChartCard({
         <p className="mt-2 text-sm text-slate-400">{subtitle}</p>
       </div>
       <div className="rounded-[24px] border border-white/10 bg-slate-950/60 p-4">
-        <div className="h-[320px] w-full">
+        <div className="h-[320px] min-h-[320px] w-full">
           {empty ? (
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
               선택한 범위에 데이터가 없습니다.
@@ -162,17 +163,77 @@ function getDefaultBrushRange(range: RangeKey, length: number): BrushRange | nul
 export default function AdminDashboard({
   dashboard,
   feedback,
-  feedbackStorageMode,
+  feedbackStorageMode = "unconfigured",
 }: {
   dashboard: DashboardStats;
   feedback: FeedbackSubmission[];
-  feedbackStorageMode?: "redis" | "unconfigured";
+  feedbackStorageMode?: FeedbackStorageMode;
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>("analytics");
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackSubmission[]>(feedback);
+  const [feedbackMode, setFeedbackMode] = useState<FeedbackStorageMode>(feedbackStorageMode);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("30d");
   const [brushRange, setBrushRange] = useState<BrushRange | null>(() =>
     getDefaultBrushRange("30d", Math.min(dashboard.trends.length, getTakeCount("30d"))),
   );
+
+  useEffect(() => {
+    if (activeTab !== "feedback") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadFeedback() {
+      setFeedbackLoading(true);
+      setFeedbackError(null);
+
+      try {
+        const response = await fetch("/api/feedback", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const data = (await response.json()) as {
+          success: boolean;
+          error?: string;
+          feedback?: FeedbackSubmission[];
+          storageMode?: FeedbackStorageMode;
+        };
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "피드백 목록을 불러오지 못했습니다.");
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setFeedbackItems(data.feedback ?? []);
+        setFeedbackMode(data.storageMode ?? "unconfigured");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setFeedbackError(
+          error instanceof Error ? error.message : "피드백 목록을 불러오지 못했습니다.",
+        );
+      } finally {
+        if (!cancelled) {
+          setFeedbackLoading(false);
+        }
+      }
+    }
+
+    void loadFeedback();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
 
   const baseData = useMemo(() => {
     const take = getTakeCount(range);
@@ -443,15 +504,22 @@ export default function AdminDashboard({
           </>
         ) : (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <div className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-bold ${
-              feedbackStorageMode === "unconfigured"
-                ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
-                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-            }`}>
-              {feedbackStorageMode === "unconfigured"
+            <div
+              className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-bold ${
+                feedbackMode === "unconfigured"
+                  ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+              }`}
+            >
+              {feedbackMode === "unconfigured"
                 ? "Feedback 저장소: 미설정. 서버 로그에서 [feedback-api], [feedback] 메시지를 확인하세요."
                 : "Feedback 저장소: Redis"}
             </div>
+            {feedbackError && (
+              <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-200">
+                {feedbackError}
+              </div>
+            )}
             <div className="mb-6 flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-black tracking-tight text-white">Feedback Submissions</h2>
@@ -460,7 +528,7 @@ export default function AdminDashboard({
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-2 text-xs font-black tracking-[0.18em] text-slate-300">
-                {formatCount(feedback.length)} items
+                {feedbackLoading ? "loading..." : `${formatCount(feedbackItems.length)} items`}
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -474,14 +542,14 @@ export default function AdminDashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {feedback.length === 0 && (
+                  {!feedbackLoading && feedbackItems.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-6 text-slate-500">
                         아직 제출된 제보가 없습니다.
                       </td>
                     </tr>
                   )}
-                  {feedback.map((entry) => (
+                  {feedbackItems.map((entry) => (
                     <tr key={entry.id} className="align-top border-b border-white/5">
                       <td className="whitespace-nowrap py-3 pr-4 text-slate-300">
                         {formatTimestamp(entry.createdAt)}
