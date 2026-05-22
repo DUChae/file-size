@@ -11,7 +11,13 @@ export default function Home() {
 
       <header className="relative pt-20 pb-12 overflow-hidden">
         <div className="max-w-5xl mx-auto px-4 text-center">
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-end gap-3 mb-6">
+            <Link
+              href="/feedback"
+              className="inline-flex items-center rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-blue-300 hover:bg-blue-500/15 transition-colors"
+            >
+              Feedback
+            </Link>
             <Link
               href="/admin"
               className="inline-flex items-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-200 hover:bg-white/10 transition-colors"
