@@ -1,149 +1,134 @@
 import { NextRequest, NextResponse } from "next/server";
+import { del, put } from "@vercel/blob";
 import sharp from "sharp";
-import { CompressionChunk, CompressionResponse } from "@/types/image";
-
-import { redis } from "@/lib/redis";
-
-const CHUNK_TTL = 60 * 10; // 10 minutes
+import { CompressionRequest, CompressionResponse } from "@/types/image";
 
 export async function POST(req: NextRequest) {
+  let sourceUrl: string | null = null;
+
   try {
-    const chunk: CompressionChunk = await req.json();
-    const { id, index, total, data, filename, mimeType, category, targetFormat } = chunk;
+    const payload: CompressionRequest = await req.json();
+    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, uploadId } = payload;
+    sourceUrl = requestSourceUrl;
 
-    const redisKey = `image_chunks:${id}`;
-    
-    // Store the chunk in a Redis Hash
-    await redis.hset(redisKey, { [index]: data });
-    
-    // Set/Refresh TTL
-    await redis.expire(redisKey, CHUNK_TTL);
+    const sourceResponse = await fetch(sourceUrl);
+    if (!sourceResponse.ok) {
+      throw new Error("Failed to fetch source image");
+    }
 
-    // Check how many chunks we have so far
-    const currentCount = await redis.hlen(redisKey);
+    const sourceArrayBuffer = await sourceResponse.arrayBuffer();
+    const inputBuffer = Buffer.from(sourceArrayBuffer);
+    const originalSize = inputBuffer.length;
 
-    if (currentCount === total) {
-      // Retrieve all chunks
-      const allChunks = await redis.hgetall<Record<string, string>>(redisKey);
-      
-      if (!allChunks) {
-        throw new Error("Failed to retrieve chunks from Redis");
-      }
+    let sharpInstance = sharp(inputBuffer);
+    const metadata = await sharpInstance.metadata();
 
-      // Ensure they are in the correct order and joined
-      const sortedChunks = Object.entries(allChunks)
-        .sort(([a], [b]) => parseInt(a) - parseInt(b))
-        .map(([, val]) => val);
-      
-      const fullBase64 = sortedChunks.join("");
-      
-      // Clean up Redis
-      await redis.del(redisKey);
+    if (!metadata.width || !metadata.height) {
+      throw new Error("Invalid image metadata");
+    }
 
-      const inputBuffer = Buffer.from(fullBase64, "base64");
-      const originalSize = inputBuffer.length;
+    let outputMime = mimeType;
+    let outputExt = filename.includes(".") ? filename.split(".").pop() || "" : "";
 
-      let sharpInstance = sharp(inputBuffer);
-      const metadata = await sharpInstance.metadata();
+    if (targetFormat === "png") {
+      outputMime = "image/png";
+      outputExt = "png";
+    } else if (targetFormat === "jpeg") {
+      outputMime = "image/jpeg";
+      outputExt = "jpg";
+    }
 
-      if (!metadata.width || !metadata.height) {
-        throw new Error("Invalid image metadata");
-      }
+    let quality = 82;
+    let resizeWidth: number | undefined;
 
-      // Determine Target Format
-      let outputMime = mimeType;
-      let outputExt = filename.split(".").pop() || "";
-      
-      if (targetFormat === "png") {
-        outputMime = "image/png";
-        outputExt = "png";
-      } else if (targetFormat === "jpeg") {
-        outputMime = "image/jpeg";
-        outputExt = "jpg";
-      }
+    switch (category) {
+      case "screenshot":
+        quality = 82;
+        break;
+      case "photo":
+        quality = 75;
+        break;
+      case "web":
+        quality = 65;
+        resizeWidth = 1200;
+        break;
+      case "high-quality":
+        quality = 92;
+        break;
+    }
 
-      // Apply Category Logic (Presets)
-      let quality = 82;
-      let resizeWidth: number | undefined;
+    const longSide = Math.max(metadata.width, metadata.height);
+    if (!resizeWidth) {
+      if (longSide >= 4000) resizeWidth = 2560;
+      else if (longSide >= 3000) resizeWidth = 2000;
+    }
 
-      switch (category) {
-        case "screenshot":
-          quality = 82; // High legibility
-          break;
-        case "photo":
-          quality = 75; // Aggressive for photos
-          break;
-        case "web":
-          quality = 65; // High compression
-          resizeWidth = 1200; // Cap for web
-          break;
-        case "high-quality":
-          quality = 92; // Minimal loss
-          break;
-      }
-
-      // Universal Resize Policy (Safety)
-      const longSide = Math.max(metadata.width, metadata.height);
-      if (!resizeWidth) {
-        if (longSide >= 4000) resizeWidth = 2560;
-        else if (longSide >= 3000) resizeWidth = 2000;
-      }
-
-      if (resizeWidth && longSide > resizeWidth) {
-        sharpInstance = sharpInstance.resize(resizeWidth, undefined, {
-          fit: "inside",
-          withoutEnlargement: true,
-        });
-      }
-
-      // Final Encoding
-      let outputBuffer: Buffer;
-      if (outputMime === "image/png") {
-        outputBuffer = await sharpInstance
-          .png({
-            quality: category === "high-quality" ? 95 : 80,
-            compressionLevel: 9,
-            palette: category !== "high-quality",
-            colors: 256,
-          })
-          .toBuffer();
-      } else {
-        outputBuffer = await sharpInstance
-          .jpeg({
-            quality,
-            progressive: true,
-            mozjpeg: true,
-          })
-          .toBuffer();
-      }
-
-      const dotIndex = filename.lastIndexOf(".");
-      const nameOnly = filename.substring(0, dotIndex);
-      const outputFilename = `${nameOnly}.optimized.${outputExt}`;
-
-      // Size Reversion Check (Only if format hasn't changed)
-      if (outputMime === mimeType && outputBuffer.length >= originalSize) {
-        return NextResponse.json<CompressionResponse>({
-          success: true,
-          data: fullBase64,
-          originalSize,
-          optimizedSize: originalSize,
-          outputFilename,
-        });
-      }
-
-      return NextResponse.json<CompressionResponse>({
-        success: true,
-        data: outputBuffer.toString("base64"),
-        originalSize,
-        optimizedSize: outputBuffer.length,
-        outputFilename,
+    if (resizeWidth && longSide > resizeWidth) {
+      sharpInstance = sharpInstance.resize(resizeWidth, undefined, {
+        fit: "inside",
+        withoutEnlargement: true,
       });
     }
 
-    return NextResponse.json({ success: true, message: "Chunk received" });
+    let outputBuffer: Buffer;
+    if (outputMime === "image/png") {
+      outputBuffer = await sharpInstance
+        .png({
+          quality: category === "high-quality" ? 95 : 80,
+          compressionLevel: 9,
+          palette: category !== "high-quality",
+          colors: 256,
+        })
+        .toBuffer();
+    } else {
+      outputBuffer = await sharpInstance
+        .jpeg({
+          quality,
+          progressive: true,
+          mozjpeg: true,
+        })
+        .toBuffer();
+    }
+
+    const dotIndex = filename.lastIndexOf(".");
+    const nameOnly = dotIndex >= 0 ? filename.substring(0, dotIndex) : filename;
+    const safeBaseName = nameOnly.replace(/[^\w.-]+/g, "-");
+    const outputFilename = `${safeBaseName}.optimized.${outputExt}`;
+    const outputPathname = `optimized/${uploadId}/${outputFilename}`;
+
+    const finalBuffer =
+      outputMime === mimeType && outputBuffer.length >= originalSize ? inputBuffer : outputBuffer;
+
+    const blob = await put(outputPathname, finalBuffer, {
+      access: "public",
+      contentType: outputMime,
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      multipart: finalBuffer.length > 5 * 1024 * 1024,
+    });
+
+    await del(sourceUrl);
+    sourceUrl = null;
+
+    return NextResponse.json<CompressionResponse>({
+      success: true,
+      originalSize,
+      optimizedSize: finalBuffer.length,
+      outputFilename,
+      outputUrl: blob.url,
+      outputDownloadUrl: blob.downloadUrl,
+    });
   } catch (error) {
     console.error("Compression error:", error);
+
+    if (sourceUrl) {
+      try {
+        await del(sourceUrl);
+      } catch {
+        // Ignore cleanup failures.
+      }
+    }
+
     return NextResponse.json<CompressionResponse>(
       {
         success: false,

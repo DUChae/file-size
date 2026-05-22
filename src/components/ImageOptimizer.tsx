@@ -51,7 +51,7 @@ export default function ImageOptimizer() {
         try {
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "compressing" } : it));
           const res = await compressImage(nextItem.originalFile, nextItem.id, nextItem.category, nextItem.targetFormat);
-          setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "done", optimizedFile: res.optimizedFile, optimizedSize: res.optimizedSize, reductionRate: ((res.originalSize - res.optimizedSize) / res.originalSize) * 100 } : it));
+          setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "done", optimizedFilename: res.optimizedFilename, optimizedUrl: res.optimizedUrl, optimizedDownloadUrl: res.optimizedDownloadUrl, optimizedSize: res.optimizedSize, reductionRate: ((res.originalSize - res.optimizedSize) / res.originalSize) * 100 } : it));
         } catch (e) {
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "error", error: e instanceof Error ? e.message : "Error" } : it));
         } finally {
