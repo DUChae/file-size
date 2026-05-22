@@ -12,6 +12,21 @@ export interface FeedbackSubmission {
   createdAt: string;
 }
 
+function isFeedbackSubmission(value: unknown): value is FeedbackSubmission {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    (candidate.type === "bug" || candidate.type === "improvement") &&
+    typeof candidate.title === "string" &&
+    typeof candidate.details === "string" &&
+    typeof candidate.createdAt === "string"
+  );
+}
+
 export function getFeedbackStorageMode() {
   return redis ? "redis" : "unconfigured";
 }
@@ -44,13 +59,28 @@ export async function getFeedbackSubmissions(): Promise<FeedbackSubmission[]> {
   }
 
   console.log("[feedback] loading submissions");
-  const entries = await redis.lrange<string>(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
-  console.log("[feedback] raw submission count", { count: entries?.length ?? 0 });
+  const entries = await redis.lrange(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
+  console.log("[feedback] raw submission count", {
+    count: entries?.length ?? 0,
+    firstEntryType: entries?.[0] === undefined ? "undefined" : typeof entries[0],
+  });
 
   return (entries ?? [])
     .map((entry) => {
       try {
-        return JSON.parse(entry) as FeedbackSubmission;
+        if (isFeedbackSubmission(entry)) {
+          return entry;
+        }
+
+        if (typeof entry === "string") {
+          const parsed = JSON.parse(entry) as unknown;
+          return isFeedbackSubmission(parsed) ? parsed : null;
+        }
+
+        console.error("[feedback] unsupported submission entry type", {
+          type: typeof entry,
+        });
+        return null;
       } catch {
         console.error("[feedback] failed to parse submission entry");
         return null;
