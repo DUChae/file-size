@@ -162,9 +162,11 @@ function getDefaultBrushRange(range: RangeKey, length: number): BrushRange | nul
 export default function AdminDashboard({
   dashboard,
   feedback,
+  feedbackStorageMode,
 }: {
   dashboard: DashboardStats;
   feedback: FeedbackSubmission[];
+  feedbackStorageMode?: "redis" | "memory";
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>("analytics");
   const [range, setRange] = useState<RangeKey>("30d");
@@ -441,6 +443,15 @@ export default function AdminDashboard({
           </>
         ) : (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+            <div className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-bold ${
+              feedbackStorageMode === "memory"
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+            }`}>
+              {feedbackStorageMode === "memory"
+                ? "Feedback 저장소: 임시 메모리. 서버가 재시작되면 목록이 사라질 수 있습니다."
+                : "Feedback 저장소: Redis"}
+            </div>
             <div className="mb-6 flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-black tracking-tight text-white">Feedback Submissions</h2>

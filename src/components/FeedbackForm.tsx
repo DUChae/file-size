@@ -25,7 +25,7 @@ export default function FeedbackForm() {
 
     setSubmitState({
       status: "submitting",
-      message: "Submitting request...",
+      message: "제출 중입니다. 잠시만 기다려 주세요.",
     });
 
     try {
@@ -44,7 +44,7 @@ export default function FeedbackForm() {
       const data = (await response.json()) as { success: boolean; error?: string };
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to submit request.");
+        throw new Error(data.error || "제출에 실패했습니다.");
       }
 
       setTitle("");
@@ -52,12 +52,12 @@ export default function FeedbackForm() {
       setRequestType("bug");
       setSubmitState({
         status: "success",
-        message: "요청이 정상적으로 제출되었습니다.",
+        message: "제보가 정상적으로 제출되었습니다. 관리자 페이지 Feedback 탭에서 바로 확인해 주세요.",
       });
     } catch (error) {
       setSubmitState({
         status: "error",
-        message: error instanceof Error ? error.message : "요청 제출에 실패했습니다.",
+        message: error instanceof Error ? error.message : "제출에 실패했습니다.",
       });
     }
   }
@@ -67,7 +67,7 @@ export default function FeedbackForm() {
       <div className="grid gap-8">
         <div>
           <p className="mb-3 text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
-            Request Type
+            요청 유형
           </p>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -79,7 +79,7 @@ export default function FeedbackForm() {
                   : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
               }`}
             >
-              Bug Report
+              버그 제보
             </button>
             <button
               type="button"
@@ -90,14 +90,14 @@ export default function FeedbackForm() {
                   : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
               }`}
             >
-              Improvement
+              개선 요청
             </button>
           </div>
         </div>
 
         <label className="grid gap-3">
           <span className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
-            Title
+            제목
           </span>
           <input
             required
@@ -111,7 +111,7 @@ export default function FeedbackForm() {
 
         <label className="grid gap-3">
           <span className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
-            Details
+            상세 내용
           </span>
           <textarea
             required
@@ -119,22 +119,23 @@ export default function FeedbackForm() {
             maxLength={4000}
             value={details}
             onChange={(event) => setDetails(event.target.value)}
-            placeholder="무슨 문제가 있었는지, 기대한 동작은 무엇이었는지, 또는 어떤 개선이 필요하다고 생각하는지 자세히 적어 주세요"
+            placeholder="무슨 문제가 있었는지, 기대한 동작은 무엇이었는지, 또는 어떤 개선이 필요한지 자세히 적어 주세요"
             className="resize-none rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
           />
         </label>
 
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <p
-            className={`text-sm font-medium ${
+            className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
               submitState.status === "error"
-                ? "text-rose-400"
+                ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
                 : submitState.status === "success"
-                  ? "text-emerald-400"
-                  : "text-slate-500"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-white/10 bg-white/5 text-slate-400"
             }`}
           >
-            {submitState.message || "여기에서 버그 제보와 개선 요청을 제출할 수 있습니다."}
+            {submitState.message ||
+              "여기에서 버그 제보와 개선 요청을 제출할 수 있습니다. 제출 후 관리자 페이지 Feedback 탭에서 확인됩니다."}
           </p>
           <button
             type="submit"
