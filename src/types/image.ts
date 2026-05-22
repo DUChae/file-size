@@ -4,7 +4,7 @@ export type ImageCategory = "screenshot" | "photo" | "web" | "high-quality";
 
 export type OutputFormat = "original" | "png" | "jpeg";
 
-export type WebAspectRatio = "original" | "16:9" | "4:3" | "1:1" | "3:4" | "9:16";
+export type WebAspectRatio = string;
 
 export interface QueueItem {
   id: string;

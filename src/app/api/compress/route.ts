@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { del, put } from "@vercel/blob";
 import sharp from "sharp";
-import { CompressionRequest, CompressionResponse, WebAspectRatio } from "@/types/image";
+import { CompressionRequest, CompressionResponse } from "@/types/image";
 
-const WEB_ASPECT_RATIO_DIMENSIONS: Record<Exclude<WebAspectRatio, "original">, { width: number; height: number }> = {
-  "16:9": { width: 1200, height: 675 },
-  "4:3": { width: 1200, height: 900 },
-  "1:1": { width: 1200, height: 1200 },
-  "3:4": { width: 900, height: 1200 },
-  "9:16": { width: 675, height: 1200 },
-};
+function parseWebAspectRatio(value: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+  if (!match) {
+    throw new Error("Aspect ratio must be in `width:height` format.");
+  }
+
+  const widthRatio = Number(match[1]);
+  const heightRatio = Number(match[2]);
+
+  if (!Number.isFinite(widthRatio) || !Number.isFinite(heightRatio) || widthRatio <= 0 || heightRatio <= 0) {
+    throw new Error("Aspect ratio values must be greater than 0.");
+  }
+
+  return { widthRatio, heightRatio };
+}
 
 export async function POST(req: NextRequest) {
   let sourceUrl: string | null = null;
@@ -78,18 +91,23 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (category === "web" && webAspectRatio !== "original") {
-      const dimensions = WEB_ASPECT_RATIO_DIMENSIONS[webAspectRatio];
+    if (category === "web") {
+      const parsedAspectRatio = parseWebAspectRatio(webAspectRatio);
+      if (parsedAspectRatio) {
+        const targetWidth = resizeWidth ?? 1200;
+        const targetHeight = Math.round((targetWidth * parsedAspectRatio.heightRatio) / parsedAspectRatio.widthRatio);
+        const safeTargetHeight = Math.max(targetHeight, 1);
       const background = outputMime === "image/png"
         ? { r: 255, g: 255, b: 255, alpha: 0 }
         : { r: 255, g: 255, b: 255, alpha: 1 };
 
-      sharpInstance = sharpInstance.resize(dimensions.width, dimensions.height, {
-        fit: "contain",
-        position: "centre",
-        background,
-        withoutEnlargement: true,
-      });
+        sharpInstance = sharpInstance.resize(targetWidth, safeTargetHeight, {
+          fit: "contain",
+          position: "centre",
+          background,
+          withoutEnlargement: true,
+        });
+      }
     }
 
     let outputBuffer: Buffer;

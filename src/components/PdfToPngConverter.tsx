@@ -121,7 +121,7 @@ export default function PdfToPngConverter() {
   };
 
   return (
-    <div className="glass-panel rounded-3xl p-8 mt-12">
+    <div className="glass-panel rounded-3xl p-8">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
         <div className="max-w-2xl">
           <h2 className="text-2xl font-black text-white tracking-tighter uppercase mb-3">PDF to PNG</h2>

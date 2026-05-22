@@ -8,14 +8,13 @@ import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const CONCURRENCY = 2;
-const WEB_ASPECT_RATIOS: WebAspectRatio[] = ["original", "16:9", "4:3", "1:1", "3:4", "9:16"];
 
 export default function ImageOptimizer() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [globalCategory, setGlobalCategory] = useState<ImageCategory>("screenshot");
   const [globalFormat, setGlobalFormat] = useState<OutputFormat>("original");
-  const [globalWebAspectRatio, setGlobalWebAspectRatio] = useState<WebAspectRatio>("original");
+  const [globalWebAspectRatio, setGlobalWebAspectRatio] = useState<WebAspectRatio>("");
   const processingRef = useRef<number>(0);
 
   const formatSize = (bytes: number) => {
@@ -107,20 +106,16 @@ export default function ImageOptimizer() {
           {globalCategory === "web" && (
             <div className="mt-6">
               <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Web Aspect Ratio</h4>
-              <div className="grid grid-cols-3 gap-3">
-                {WEB_ASPECT_RATIOS.map((ratio) => (
-                  <button
-                    key={ratio}
-                    onClick={() => setGlobalWebAspectRatio(ratio)}
-                    className={`px-3 py-2.5 rounded-xl text-[12px] font-bold border transition-all ${
-                      globalWebAspectRatio === ratio
-                        ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20"
-                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
-                    }`}
-                  >
-                    {ratio === "original" ? "Original" : ratio}
-                  </button>
-                ))}
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <input
+                  value={globalWebAspectRatio}
+                  onChange={(event) => setGlobalWebAspectRatio(event.target.value)}
+                  placeholder="e.g. 16:9, 4:3, 1:1"
+                  className="w-full bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500"
+                />
+                <p className="mt-2 text-xs font-medium text-slate-500">
+                  Leave empty to keep the original ratio.
+                </p>
               </div>
             </div>
           )}

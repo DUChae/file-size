@@ -1,5 +1,4 @@
-import ImageOptimizer from "@/components/ImageOptimizer";
-import PdfToPngConverter from "@/components/PdfToPngConverter";
+import ToolWorkspace from "@/components/ToolWorkspace";
 
 export default function Home() {
   return (
@@ -27,8 +26,7 @@ export default function Home() {
       </header>
 
       <section className="relative z-10">
-        <ImageOptimizer />
-        <PdfToPngConverter />
+        <ToolWorkspace />
       </section>
 
       <footer className="max-w-5xl mx-auto px-4 py-20 text-center border-t border-white/5 mt-20">
