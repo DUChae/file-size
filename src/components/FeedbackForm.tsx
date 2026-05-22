@@ -18,7 +18,6 @@ export default function FeedbackForm() {
   const [requestType, setRequestType] = useState<RequestType>("bug");
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
-  const [contact, setContact] = useState("");
   const [submitState, setSubmitState] = useState<SubmitState>(initialState);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -39,7 +38,6 @@ export default function FeedbackForm() {
           type: requestType,
           title,
           details,
-          contact,
         }),
       });
 
@@ -51,16 +49,15 @@ export default function FeedbackForm() {
 
       setTitle("");
       setDetails("");
-      setContact("");
       setRequestType("bug");
       setSubmitState({
         status: "success",
-        message: "Your request was submitted.",
+        message: "요청이 정상적으로 제출되었습니다.",
       });
     } catch (error) {
       setSubmitState({
         status: "error",
-        message: error instanceof Error ? error.message : "Failed to submit request.",
+        message: error instanceof Error ? error.message : "요청 제출에 실패했습니다.",
       });
     }
   }
@@ -107,7 +104,7 @@ export default function FeedbackForm() {
             maxLength={120}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Summarize the issue or request"
+            placeholder="버그나 개선 요청 제목을 입력해 주세요"
             className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
           />
         </label>
@@ -122,20 +119,8 @@ export default function FeedbackForm() {
             maxLength={4000}
             value={details}
             onChange={(event) => setDetails(event.target.value)}
-            placeholder="Describe what happened, what you expected, and any ideas for improvement"
+            placeholder="무슨 문제가 있었는지, 기대한 동작은 무엇이었는지, 또는 어떤 개선이 필요하다고 생각하는지 자세히 적어 주세요"
             className="resize-none rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
-          />
-        </label>
-
-        <label className="grid gap-3">
-          <span className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
-            Contact
-          </span>
-          <input
-            value={contact}
-            onChange={(event) => setContact(event.target.value)}
-            placeholder="Optional email or handle"
-            className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
           />
         </label>
 
@@ -149,14 +134,14 @@ export default function FeedbackForm() {
                   : "text-slate-500"
             }`}
           >
-            {submitState.message || "Reports and requests can be submitted here."}
+            {submitState.message || "여기에서 버그 제보와 개선 요청을 제출할 수 있습니다."}
           </p>
           <button
             type="submit"
             disabled={submitState.status === "submitting"}
             className="rounded-2xl bg-white px-6 py-3 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02] disabled:cursor-wait disabled:opacity-70"
           >
-            {submitState.status === "submitting" ? "Submitting..." : "Submit"}
+            {submitState.status === "submitting" ? "제출 중..." : "제출하기"}
           </button>
         </div>
       </div>

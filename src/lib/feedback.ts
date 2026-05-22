@@ -8,7 +8,6 @@ export interface FeedbackSubmission {
   type: "bug" | "improvement";
   title: string;
   details: string;
-  contact: string;
   createdAt: string;
 }
 

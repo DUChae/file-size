@@ -8,7 +8,6 @@ interface FeedbackPayload {
   type?: string;
   title?: string;
   details?: string;
-  contact?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -17,7 +16,6 @@ export async function POST(req: NextRequest) {
     const type = payload.type === "improvement" ? "improvement" : "bug";
     const title = payload.title?.trim();
     const details = payload.details?.trim();
-    const contact = payload.contact?.trim() || "";
 
     if (!title) {
       return NextResponse.json(
@@ -38,7 +36,6 @@ export async function POST(req: NextRequest) {
       type,
       title: title.slice(0, 120),
       details: details.slice(0, 4000),
-      contact: contact.slice(0, 200),
       createdAt: new Date().toISOString(),
     };
 

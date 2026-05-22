@@ -12,8 +12,8 @@ export default function FeedbackPage() {
             <p className="mb-3 text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
               Feedback Center
             </p>
-            <h1 className="text-4xl font-black tracking-tighter text-white md:text-6xl">
-              Report Bugs. Request Improvements.
+            <h1 className="text-3xl font-black tracking-tighter text-white md:text-5xl">
+              버그 제보 · 개선 요청
             </h1>
           </div>
           <Link

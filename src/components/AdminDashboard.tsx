@@ -456,17 +456,16 @@ export default function AdminDashboard({
               <table className="w-full text-sm">
                 <thead className="text-slate-400">
                   <tr className="border-b border-white/10">
-                    <th className="py-3 pr-4 text-left">Time</th>
-                    <th className="py-3 pr-4 text-left">Type</th>
-                    <th className="py-3 pr-4 text-left">Title</th>
-                    <th className="py-3 pr-4 text-left">Details</th>
-                    <th className="py-3 text-left">Contact</th>
+                    <th className="py-3 pr-4 text-left">시간</th>
+                    <th className="py-3 pr-4 text-left">유형</th>
+                    <th className="py-3 pr-4 text-left">제목</th>
+                    <th className="py-3 pr-4 text-left">내용</th>
                   </tr>
                 </thead>
                 <tbody>
                   {feedback.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-6 text-slate-500">
+                      <td colSpan={4} className="py-6 text-slate-500">
                         아직 제출된 제보가 없습니다.
                       </td>
                     </tr>
@@ -491,7 +490,6 @@ export default function AdminDashboard({
                       <td className="max-w-xl whitespace-pre-wrap py-3 pr-4 text-slate-300">
                         {entry.details}
                       </td>
-                      <td className="py-3 text-slate-300">{entry.contact || "-"}</td>
                     </tr>
                   ))}
                 </tbody>
