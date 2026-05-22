@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     const inputBuffer = Buffer.from(sourceArrayBuffer);
     const originalSize = inputBuffer.length;
 
-    let sharpInstance = sharp(inputBuffer);
+    let sharpInstance = sharp(inputBuffer).rotate();
     const metadata = await sharpInstance.metadata();
 
     if (!metadata.width || !metadata.height) {
