@@ -121,7 +121,3 @@ npm run build
 - 이미지 입력은 현재 `PNG/JPG/JPEG`만 지원합니다.
 - PDF to PNG 결과는 현재 항상 `ZIP`으로 내려갑니다.
 - 대용량 PDF는 입력 크기가 20MB 이하라도 페이지 수와 해상도에 따라 브라우저 메모리 사용량이 커질 수 있습니다.
-
-## 참고
-
-- 배포 관련 메모: [DEPLOYMENT.md](./DEPLOYMENT.md)
