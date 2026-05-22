@@ -20,7 +20,6 @@ import { FeedbackSubmission } from "@/lib/feedback";
 
 type RangeKey = "7d" | "30d" | "365d";
 type AdminTab = "analytics" | "feedback";
-type FeedbackStorageMode = "redis" | "unconfigured";
 
 function formatTimestamp(value: string) {
   try {
@@ -185,17 +184,13 @@ function getDefaultBrushRange(
 export default function AdminDashboard({
   dashboard,
   feedback,
-  feedbackStorageMode = "unconfigured",
 }: {
   dashboard: DashboardStats;
   feedback: FeedbackSubmission[];
-  feedbackStorageMode?: FeedbackStorageMode;
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>("analytics");
   const [feedbackItems, setFeedbackItems] =
     useState<FeedbackSubmission[]>(feedback);
-  const [feedbackMode, setFeedbackMode] =
-    useState<FeedbackStorageMode>(feedbackStorageMode);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -228,7 +223,6 @@ export default function AdminDashboard({
           success: boolean;
           error?: string;
           feedback?: FeedbackSubmission[];
-          storageMode?: FeedbackStorageMode;
         };
 
         if (!response.ok || !data.success) {
@@ -240,7 +234,6 @@ export default function AdminDashboard({
         }
 
         setFeedbackItems(data.feedback ?? []);
-        setFeedbackMode(data.storageMode ?? "unconfigured");
       } catch (error) {
         if (cancelled) {
           return;
@@ -739,13 +732,6 @@ export default function AdminDashboard({
           </>
         ) : (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <div
-              className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-bold ${
-                feedbackMode === "unconfigured"
-                  ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
-                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-              }`}
-            ></div>
             {feedbackError && (
               <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-200">
                 {feedbackError}
