@@ -153,7 +153,6 @@ function getDefaultBrushRange(range: RangeKey, length: number): BrushRange | nul
   }
 
   const windowSize = getDefaultWindow(range, length);
-
   return {
     startIndex: Math.max(0, length - windowSize),
     endIndex: length - 1,
@@ -174,6 +173,7 @@ export default function AdminDashboard({
   const [feedbackMode, setFeedbackMode] = useState<FeedbackStorageMode>(feedbackStorageMode);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("30d");
   const [brushRange, setBrushRange] = useState<BrushRange | null>(() =>
     getDefaultBrushRange("30d", Math.min(dashboard.trends.length, getTakeCount("30d"))),
@@ -299,6 +299,34 @@ export default function AdminDashboard({
     setBrushRange(
       getDefaultBrushRange(nextRange, Math.min(dashboard.trends.length, getTakeCount(nextRange))),
     );
+  };
+
+  const handleDeleteFeedback = async (id: string) => {
+    setDeletingId(id);
+    setFeedbackError(null);
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      const data = (await response.json()) as { success: boolean; error?: string };
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "피드백 삭제에 실패했습니다.");
+      }
+
+      setFeedbackItems((items) => items.filter((item) => item.id !== id));
+    } catch (error) {
+      setFeedbackError(
+        error instanceof Error ? error.message : "피드백 삭제에 실패했습니다.",
+      );
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -539,12 +567,13 @@ export default function AdminDashboard({
                     <th className="py-3 pr-4 text-left">유형</th>
                     <th className="py-3 pr-4 text-left">제목</th>
                     <th className="py-3 pr-4 text-left">내용</th>
+                    <th className="py-3 text-left">관리</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!feedbackLoading && feedbackItems.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="py-6 text-slate-500">
+                      <td colSpan={5} className="py-6 text-slate-500">
                         아직 제출된 제보가 없습니다.
                       </td>
                     </tr>
@@ -568,6 +597,15 @@ export default function AdminDashboard({
                       <td className="py-3 pr-4 font-bold text-white">{entry.title}</td>
                       <td className="max-w-xl whitespace-pre-wrap py-3 pr-4 text-slate-300">
                         {entry.details}
+                      </td>
+                      <td className="py-3 text-slate-300">
+                        <button
+                          onClick={() => void handleDeleteFeedback(entry.id)}
+                          disabled={deletingId === entry.id}
+                          className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-black text-rose-200 transition-colors hover:bg-rose-500/20 disabled:cursor-wait disabled:opacity-60"
+                        >
+                          {deletingId === entry.id ? "삭제 중..." : "삭제"}
+                        </button>
                       </td>
                     </tr>
                   ))}

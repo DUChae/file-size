@@ -41,7 +41,10 @@ export default function FeedbackForm() {
         }),
       });
 
-      const data = (await response.json()) as { success: boolean; error?: string };
+      const data = (await response.json()) as {
+        success: boolean;
+        error?: string;
+      };
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || "제출에 실패했습니다.");
@@ -52,18 +55,23 @@ export default function FeedbackForm() {
       setRequestType("bug");
       setSubmitState({
         status: "success",
-        message: "제보가 정상적으로 제출되었습니다. 관리자 페이지 Feedback 탭에서 바로 확인해 주세요.",
+        message:
+          "제보가 정상적으로 제출되었습니다. 관리자 페이지 Feedback 탭에서 바로 확인해 주세요.",
       });
     } catch (error) {
       setSubmitState({
         status: "error",
-        message: error instanceof Error ? error.message : "제출에 실패했습니다.",
+        message:
+          error instanceof Error ? error.message : "제출에 실패했습니다.",
       });
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="glass-panel rounded-[32px] p-8 md:p-10">
+    <form
+      onSubmit={handleSubmit}
+      className="glass-panel rounded-[32px] p-8 md:p-10"
+    >
       <div className="grid gap-8">
         <div>
           <p className="mb-3 text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
@@ -133,10 +141,7 @@ export default function FeedbackForm() {
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                   : "border-white/10 bg-white/5 text-slate-400"
             }`}
-          >
-            {submitState.message ||
-              "여기에서 버그 제보와 개선 요청을 제출할 수 있습니다. 제출 후 관리자 페이지 Feedback 탭에서 확인됩니다."}
-          </p>
+          ></p>
           <button
             type="submit"
             disabled={submitState.status === "submitting"}
