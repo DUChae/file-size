@@ -35,11 +35,32 @@ function formatCount(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
+function formatBytes(value: number) {
+  if (value <= 0) return "0 B";
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unitIndex = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const size = value / Math.pow(1024, unitIndex);
+
+  return `${size.toLocaleString("ko-KR", {
+    maximumFractionDigits: size >= 10 || unitIndex === 0 ? 0 : 1,
+  })} ${units[unitIndex]}`;
+}
+
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
       <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">{label}</div>
       <div className="mt-3 text-3xl font-black text-white">{formatCount(value)}</div>
+    </div>
+  );
+}
+
+function SizeStatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+      <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">{label}</div>
+      <div className="mt-3 text-3xl font-black text-white">{formatBytes(value)}</div>
     </div>
   );
 }
@@ -261,6 +282,7 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
           <StatCard label="변환 실패 수" value={dashboard.totals.conversionsFailed} />
           <StatCard label="이미지 변환 성공" value={dashboard.totals.imageSuccess} />
           <StatCard label="PDF 변환 성공" value={dashboard.totals.pdfSuccess} />
+          <SizeStatCard label="절감한 총 용량" value={dashboard.totals.totalBytesSaved} />
         </div>
 
         <div className="mt-10 grid gap-6 xl:grid-cols-2">

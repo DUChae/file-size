@@ -24,6 +24,7 @@ export interface AnalyticsEvent {
   mode?: string;
   filename?: string;
   fileSize?: number;
+  optimizedSize?: number;
   pageCount?: number;
   error?: string;
   timestamp?: string;
@@ -53,6 +54,7 @@ export interface DashboardStats {
     conversionsFailed: number;
     imageSuccess: number;
     pdfSuccess: number;
+    totalBytesSaved: number;
   };
   trends: DailyTrendPoint[];
   recentLogs: DashboardLogEntry[];
@@ -124,6 +126,12 @@ export async function trackAnalyticsEvent(event: AnalyticsEvent) {
       await incrementTotal("imageSuccess");
       await incrementDaily("conversionsSucceeded", dateKey);
       await incrementDaily("imageSuccess", dateKey);
+      if (typeof event.fileSize === "number" && typeof event.optimizedSize === "number") {
+        const savedBytes = Math.max(0, event.fileSize - event.optimizedSize);
+        if (savedBytes > 0) {
+          await incrementTotal("totalBytesSaved", savedBytes);
+        }
+      }
       break;
     case "pdf_job_success":
       await incrementTotal("conversionsSucceeded");
@@ -153,6 +161,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         conversionsFailed: 0,
         imageSuccess: 0,
         pdfSuccess: 0,
+        totalBytesSaved: 0,
       },
       trends: [],
       recentLogs: [],
@@ -196,6 +205,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       conversionsFailed: toNumber(totals?.conversionsFailed),
       imageSuccess: toNumber(totals?.imageSuccess),
       pdfSuccess: toNumber(totals?.pdfSuccess),
+      totalBytesSaved: toNumber(totals?.totalBytesSaved),
     },
     trends,
     recentLogs: (logs ?? [])

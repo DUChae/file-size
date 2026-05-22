@@ -152,6 +152,7 @@ export async function POST(req: NextRequest) {
       mode: category,
       filename,
       fileSize: originalSize,
+      optimizedSize: finalBuffer.length,
     });
 
     await del(sourceUrl);
