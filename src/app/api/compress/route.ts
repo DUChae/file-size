@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { del, put } from "@vercel/blob";
 import sharp from "sharp";
-import { CompressionRequest, CompressionResponse } from "@/types/image";
+import { CompressionRequest, CompressionResponse, WebAspectRatio } from "@/types/image";
+
+const WEB_ASPECT_RATIO_DIMENSIONS: Record<Exclude<WebAspectRatio, "original">, { width: number; height: number }> = {
+  "16:9": { width: 1200, height: 675 },
+  "4:3": { width: 1200, height: 900 },
+  "1:1": { width: 1200, height: 1200 },
+  "3:4": { width: 900, height: 1200 },
+  "9:16": { width: 675, height: 1200 },
+};
 
 export async function POST(req: NextRequest) {
   let sourceUrl: string | null = null;
 
   try {
     const payload: CompressionRequest = await req.json();
-    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, uploadId } = payload;
+    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webAspectRatio, uploadId } = payload;
     sourceUrl = requestSourceUrl;
 
     const sourceResponse = await fetch(sourceUrl);
@@ -66,6 +74,20 @@ export async function POST(req: NextRequest) {
     if (resizeWidth && longSide > resizeWidth) {
       sharpInstance = sharpInstance.resize(resizeWidth, undefined, {
         fit: "inside",
+        withoutEnlargement: true,
+      });
+    }
+
+    if (category === "web" && webAspectRatio !== "original") {
+      const dimensions = WEB_ASPECT_RATIO_DIMENSIONS[webAspectRatio];
+      const background = outputMime === "image/png"
+        ? { r: 255, g: 255, b: 255, alpha: 0 }
+        : { r: 255, g: 255, b: 255, alpha: 1 };
+
+      sharpInstance = sharpInstance.resize(dimensions.width, dimensions.height, {
+        fit: "contain",
+        position: "centre",
+        background,
         withoutEnlargement: true,
       });
     }

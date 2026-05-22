@@ -1,19 +1,21 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { QueueItem, QueueStatus, ImageCategory, OutputFormat } from "@/types/image";
+import { QueueItem, QueueStatus, ImageCategory, OutputFormat, WebAspectRatio } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const CONCURRENCY = 2;
+const WEB_ASPECT_RATIOS: WebAspectRatio[] = ["original", "16:9", "4:3", "1:1", "3:4", "9:16"];
 
 export default function ImageOptimizer() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [globalCategory, setGlobalCategory] = useState<ImageCategory>("screenshot");
   const [globalFormat, setGlobalFormat] = useState<OutputFormat>("original");
+  const [globalWebAspectRatio, setGlobalWebAspectRatio] = useState<WebAspectRatio>("original");
   const processingRef = useRef<number>(0);
 
   const formatSize = (bytes: number) => {
@@ -36,10 +38,11 @@ export default function ImageOptimizer() {
         status: "queued",
         category: globalCategory,
         targetFormat: globalFormat,
+        webAspectRatio: globalWebAspectRatio,
       }));
 
     setQueue(prev => [...prev, ...newItems]);
-  }, [queue.length, globalCategory, globalFormat]);
+  }, [queue.length, globalCategory, globalFormat, globalWebAspectRatio]);
 
   const processQueue = useCallback(async () => {
     if (processingRef.current >= CONCURRENCY) return;
@@ -50,7 +53,7 @@ export default function ImageOptimizer() {
       (async () => {
         try {
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "compressing" } : it));
-          const res = await compressImage(nextItem.originalFile, nextItem.id, nextItem.category, nextItem.targetFormat);
+          const res = await compressImage(nextItem.originalFile, nextItem.id, nextItem.category, nextItem.targetFormat, nextItem.webAspectRatio);
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "done", optimizedFilename: res.optimizedFilename, optimizedUrl: res.optimizedUrl, optimizedDownloadUrl: res.optimizedDownloadUrl, optimizedSize: res.optimizedSize, reductionRate: ((res.originalSize - res.optimizedSize) / res.originalSize) * 100 } : it));
         } catch (e) {
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "error", error: e instanceof Error ? e.message : "Error" } : it));
@@ -101,6 +104,26 @@ export default function ImageOptimizer() {
               {globalCategory === 'high-quality' && "✨ 육안상 손실 없이 불필요한 데이터만 제거하여 원본 품질을 보관합니다."}
             </p>
           </div>
+          {globalCategory === "web" && (
+            <div className="mt-6">
+              <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Web Aspect Ratio</h4>
+              <div className="grid grid-cols-3 gap-3">
+                {WEB_ASPECT_RATIOS.map((ratio) => (
+                  <button
+                    key={ratio}
+                    onClick={() => setGlobalWebAspectRatio(ratio)}
+                    className={`px-3 py-2.5 rounded-xl text-[12px] font-bold border transition-all ${
+                      globalWebAspectRatio === ratio
+                        ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20"
+                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    {ratio === "original" ? "Original" : ratio}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="flex-1 w-full">
