@@ -16,8 +16,10 @@ import {
   YAxis,
 } from "recharts";
 import { DashboardStats } from "@/lib/analytics";
+import { FeedbackSubmission } from "@/lib/feedback";
 
 type RangeKey = "7d" | "30d" | "365d";
+type AdminTab = "analytics" | "feedback";
 
 function formatTimestamp(value: string) {
   try {
@@ -157,7 +159,14 @@ function getDefaultBrushRange(range: RangeKey, length: number): BrushRange | nul
   };
 }
 
-export default function AdminDashboard({ dashboard }: { dashboard: DashboardStats }) {
+export default function AdminDashboard({
+  dashboard,
+  feedback,
+}: {
+  dashboard: DashboardStats;
+  feedback: FeedbackSubmission[];
+}) {
+  const [activeTab, setActiveTab] = useState<AdminTab>("analytics");
   const [range, setRange] = useState<RangeKey>("30d");
   const [brushRange, setBrushRange] = useState<BrushRange | null>(() =>
     getDefaultBrushRange("30d", Math.min(dashboard.trends.length, getTakeCount("30d"))),
@@ -236,7 +245,7 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
           <div>
             <h1 className="text-4xl font-black tracking-tight">Admin Dashboard</h1>
             <p className="mt-3 text-sm text-slate-400">
-              Redis 기준으로 방문, 업로드, 변환 성공/실패 로그를 한 화면에서 확인합니다.
+              Redis 기준으로 방문, 업로드, 변환 로그와 사용자 제보를 확인합니다.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -247,167 +256,249 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
               메인으로
             </Link>
             <div className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1.5">
-              {(["7d", "30d", "365d"] as const).map((key) => (
+              {(["analytics", "feedback"] as const).map((key) => (
                 <button
                   key={key}
-                  onClick={() => handleRangeChange(key)}
+                  onClick={() => setActiveTab(key)}
                   className={`rounded-xl px-4 py-2 text-xs font-black tracking-[0.18em] transition-colors ${
-                    range === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-slate-200"
+                    activeTab === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  {key}
+                  {key === "analytics" ? "Analytics" : "Feedback"}
                 </button>
               ))}
             </div>
+            {activeTab === "analytics" && (
+              <div className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1.5">
+                {(["7d", "30d", "365d"] as const).map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => handleRangeChange(key)}
+                    className={`rounded-xl px-4 py-2 text-xs font-black tracking-[0.18em] transition-colors ${
+                      range === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {key}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-
-        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-5">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Selected Range</div>
-          <div className="mt-2 text-lg font-bold text-white">{rangeLabel}</div>
-          <p className="mt-2 text-sm text-slate-400">그래프 하단의 브러시를 드래그해서 표시 기간을 조절할 수 있습니다.</p>
         </div>
 
         {!dashboard.enabled && (
           <div className="mb-8 rounded-3xl border border-amber-500/20 bg-amber-500/10 p-6 text-amber-100">
-            Redis/KV 환경변수가 없어 집계를 불러올 수 없습니다.
+            Redis/KV 환경변수가 없어 집계를 불러오지 못했습니다.
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="페이지뷰" value={dashboard.totals.pageViews} />
-          <StatCard label="방문자 수" value={dashboard.totals.uniqueVisitors} />
-          <StatCard label="업로드 파일 수" value={dashboard.totals.filesSent} />
-          <StatCard label="변환 성공 수" value={dashboard.totals.conversionsSucceeded} />
-          <StatCard label="변환 실패 수" value={dashboard.totals.conversionsFailed} />
-          <StatCard label="이미지 변환 성공" value={dashboard.totals.imageSuccess} />
-          <StatCard label="PDF 변환 성공" value={dashboard.totals.pdfSuccess} />
-          <SizeStatCard label="절감한 총 용량" value={dashboard.totals.totalBytesSaved} />
-        </div>
+        {activeTab === "analytics" ? (
+          <>
+            <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-5">
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+                Selected Range
+              </div>
+              <div className="mt-2 text-lg font-bold text-white">{rangeLabel}</div>
+              <p className="mt-2 text-sm text-slate-400">
+                그래프 하단 브러시를 드래그해서 표시 기간을 조절할 수 있습니다.
+              </p>
+            </div>
 
-        <div className="mt-10 grid gap-6 xl:grid-cols-2">
-          <ChartCard title="Conversion Trend" subtitle={`${rangeLabel} 변환 성공 추이`} empty={baseData.length === 0}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={baseData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip content={<DashboardTooltip />} cursor={{ stroke: "rgba(255,255,255,0.15)" }} />
-                <Line
-                  type="monotone"
-                  dataKey="conversions"
-                  name="성공"
-                  stroke="#38bdf8"
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 6, fill: "#e0f2fe", stroke: "#38bdf8", strokeWidth: 2 }}
-                />
-                <Brush
-                  dataKey="date"
-                  height={28}
-                  stroke="#38bdf8"
-                  travellerWidth={14}
-                  startIndex={brushRange?.startIndex}
-                  endIndex={brushRange?.endIndex}
-                  onChange={handleBrushChange}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartCard>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <StatCard label="페이지뷰" value={dashboard.totals.pageViews} />
+              <StatCard label="방문자 수" value={dashboard.totals.uniqueVisitors} />
+              <StatCard label="업로드 파일 수" value={dashboard.totals.filesSent} />
+              <StatCard label="변환 성공 수" value={dashboard.totals.conversionsSucceeded} />
+              <StatCard label="변환 실패 수" value={dashboard.totals.conversionsFailed} />
+              <StatCard label="이미지 변환 성공" value={dashboard.totals.imageSuccess} />
+              <StatCard label="PDF 변환 성공" value={dashboard.totals.pdfSuccess} />
+              <SizeStatCard label="절감한 총 용량" value={dashboard.totals.totalBytesSaved} />
+            </div>
 
-          <ChartCard title="Success vs Failure" subtitle={`${rangeLabel} 성공/실패 비교`} empty={chartData.length === 0}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barGap={10}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip content={<DashboardTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                <Legend />
-                <Bar dataKey="conversions" name="성공" fill="#22c55e" radius={[10, 10, 0, 0]} />
-                <Bar dataKey="failures" name="실패" fill="#f97316" radius={[10, 10, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </div>
+            <div className="mt-10 grid gap-6 xl:grid-cols-2">
+              <ChartCard title="Conversion Trend" subtitle={`${rangeLabel} 변환 성공 추이`} empty={baseData.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={baseData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
+                    <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip content={<DashboardTooltip />} cursor={{ stroke: "rgba(255,255,255,0.15)" }} />
+                    <Line
+                      type="monotone"
+                      dataKey="conversions"
+                      name="성공"
+                      stroke="#38bdf8"
+                      strokeWidth={3}
+                      dot={false}
+                      activeDot={{ r: 6, fill: "#e0f2fe", stroke: "#38bdf8", strokeWidth: 2 }}
+                    />
+                    <Brush
+                      dataKey="date"
+                      height={28}
+                      stroke="#38bdf8"
+                      travellerWidth={14}
+                      startIndex={brushRange?.startIndex}
+                      endIndex={brushRange?.endIndex}
+                      onChange={handleBrushChange}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartCard>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-          <ChartCard title="Traffic Trend" subtitle={`${rangeLabel} 방문 추이`} empty={chartData.length === 0}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip content={<DashboardTooltip />} cursor={{ stroke: "rgba(255,255,255,0.15)" }} />
-                <Line
-                  type="monotone"
-                  dataKey="pageViews"
-                  name="페이지뷰"
-                  stroke="#a78bfa"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: "#a78bfa", strokeWidth: 0 }}
-                  activeDot={{ r: 6, fill: "#f5f3ff", stroke: "#a78bfa", strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartCard>
+              <ChartCard title="Success vs Failure" subtitle={`${rangeLabel} 성공/실패 비교`} empty={chartData.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barGap={10}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
+                    <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip content={<DashboardTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Legend />
+                    <Bar dataKey="conversions" name="성공" fill="#22c55e" radius={[10, 10, 0, 0]} />
+                    <Bar dataKey="failures" name="실패" fill="#f97316" radius={[10, 10, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
 
-          <ChartCard title="Tool Mix" subtitle={`${rangeLabel} 도구별 성공 수`} empty={chartData.length === 0}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barGap={10}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip content={<DashboardTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                <Legend />
-                <Bar dataKey="imageSuccess" name="Image" fill="#38bdf8" radius={[10, 10, 0, 0]} />
-                <Bar dataKey="pdfSuccess" name="PDF" fill="#f43f5e" radius={[10, 10, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </div>
+            <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+              <ChartCard title="Traffic Trend" subtitle={`${rangeLabel} 방문 추이`} empty={chartData.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
+                    <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip content={<DashboardTooltip />} cursor={{ stroke: "rgba(255,255,255,0.15)" }} />
+                    <Line
+                      type="monotone"
+                      dataKey="pageViews"
+                      name="페이지뷰"
+                      stroke="#a78bfa"
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: "#a78bfa", strokeWidth: 0 }}
+                      activeDot={{ r: 6, fill: "#f5f3ff", stroke: "#a78bfa", strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartCard>
 
-        <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-xl font-black tracking-tight">실패한 변환 로그</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-slate-400">
-                <tr className="border-b border-white/10">
-                  <th className="py-3 pr-4 text-left">시간</th>
-                  <th className="py-3 pr-4 text-left">이벤트</th>
-                  <th className="py-3 pr-4 text-left">도구</th>
-                  <th className="py-3 pr-4 text-left">모드</th>
-                  <th className="py-3 pr-4 text-left">파일</th>
-                  <th className="py-3 pr-4 text-left">크기</th>
-                  <th className="py-3 text-left">에러</th>
-                </tr>
-              </thead>
-              <tbody>
-                {failedLogs.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-slate-500">
-                      선택한 범위에 실패한 변환 로그가 없습니다.
-                    </td>
+              <ChartCard title="Tool Mix" subtitle={`${rangeLabel} 도구별 성공 수`} empty={chartData.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barGap={10}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
+                    <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip content={<DashboardTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Legend />
+                    <Bar dataKey="imageSuccess" name="Image" fill="#38bdf8" radius={[10, 10, 0, 0]} />
+                    <Bar dataKey="pdfSuccess" name="PDF" fill="#f43f5e" radius={[10, 10, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h2 className="mb-4 text-xl font-black tracking-tight">실패한 변환 로그</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-slate-400">
+                    <tr className="border-b border-white/10">
+                      <th className="py-3 pr-4 text-left">시간</th>
+                      <th className="py-3 pr-4 text-left">이벤트</th>
+                      <th className="py-3 pr-4 text-left">도구</th>
+                      <th className="py-3 pr-4 text-left">모드</th>
+                      <th className="py-3 pr-4 text-left">파일</th>
+                      <th className="py-3 pr-4 text-left">크기</th>
+                      <th className="py-3 text-left">에러</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {failedLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-slate-500">
+                          선택한 범위에 실패 로그가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                    {failedLogs.map((log, index) => (
+                      <tr key={`${log.timestamp}-${index}`} className="align-top border-b border-white/5">
+                        <td className="whitespace-nowrap py-3 pr-4 text-slate-300">
+                          {formatTimestamp(log.timestamp)}
+                        </td>
+                        <td className="py-3 pr-4 font-bold text-white">{log.type}</td>
+                        <td className="py-3 pr-4 text-slate-300">{log.tool ?? "-"}</td>
+                        <td className="py-3 pr-4 text-slate-300">{log.mode ?? "-"}</td>
+                        <td className="break-all py-3 pr-4 text-slate-300">{log.filename ?? "-"}</td>
+                        <td className="py-3 pr-4 text-slate-300">
+                          {typeof log.fileSize === "number" ? formatCount(log.fileSize) : "-"}
+                        </td>
+                        <td className="py-3 text-slate-300">{log.error ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-white">Feedback Submissions</h2>
+                <p className="mt-2 text-sm text-slate-400">
+                  사용자가 남긴 버그 제보와 개선 요청을 최신순으로 확인합니다.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-2 text-xs font-black tracking-[0.18em] text-slate-300">
+                {formatCount(feedback.length)} items
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-slate-400">
+                  <tr className="border-b border-white/10">
+                    <th className="py-3 pr-4 text-left">Time</th>
+                    <th className="py-3 pr-4 text-left">Type</th>
+                    <th className="py-3 pr-4 text-left">Title</th>
+                    <th className="py-3 pr-4 text-left">Details</th>
+                    <th className="py-3 text-left">Contact</th>
                   </tr>
-                )}
-                {failedLogs.map((log, index) => (
-                  <tr key={`${log.timestamp}-${index}`} className="align-top border-b border-white/5">
-                    <td className="whitespace-nowrap py-3 pr-4 text-slate-300">
-                      {formatTimestamp(log.timestamp)}
-                    </td>
-                    <td className="py-3 pr-4 font-bold text-white">{log.type}</td>
-                    <td className="py-3 pr-4 text-slate-300">{log.tool ?? "-"}</td>
-                    <td className="py-3 pr-4 text-slate-300">{log.mode ?? "-"}</td>
-                    <td className="break-all py-3 pr-4 text-slate-300">{log.filename ?? "-"}</td>
-                    <td className="py-3 pr-4 text-slate-300">
-                      {typeof log.fileSize === "number" ? formatCount(log.fileSize) : "-"}
-                    </td>
-                    <td className="py-3 text-slate-300">{log.error ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {feedback.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-slate-500">
+                        아직 제출된 제보가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                  {feedback.map((entry) => (
+                    <tr key={entry.id} className="align-top border-b border-white/5">
+                      <td className="whitespace-nowrap py-3 pr-4 text-slate-300">
+                        {formatTimestamp(entry.createdAt)}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
+                            entry.type === "bug"
+                              ? "bg-rose-500/10 text-rose-300"
+                              : "bg-emerald-500/10 text-emerald-300"
+                          }`}
+                        >
+                          {entry.type}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 font-bold text-white">{entry.title}</td>
+                      <td className="max-w-xl whitespace-pre-wrap py-3 pr-4 text-slate-300">
+                        {entry.details}
+                      </td>
+                      <td className="py-3 text-slate-300">{entry.contact || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
