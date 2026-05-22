@@ -5,7 +5,7 @@ const LOGS_KEY = "analytics:logs:recent";
 const VISITORS_KEY = "analytics:visitors:all";
 const DAILY_KEY_PREFIX = "analytics:daily:";
 const MAX_LOGS = 100;
-const TREND_DAYS = 30;
+const TREND_DAYS = 365;
 
 export type AnalyticsEventType =
   | "page_view"

@@ -5,6 +5,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
+  Brush,
   CartesianGrid,
   Legend,
   Line,
@@ -16,7 +17,7 @@ import {
 } from "recharts";
 import { DashboardStats } from "@/lib/analytics";
 
-type RangeKey = "7d" | "30d";
+type RangeKey = "7d" | "30d" | "365d";
 
 function formatTimestamp(value: string) {
   try {
@@ -46,10 +47,12 @@ function StatCard({ label, value }: { label: string; value: number }) {
 function ChartCard({
   title,
   subtitle,
+  empty,
   children,
 }: {
   title: string;
   subtitle: string;
+  empty?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -59,7 +62,15 @@ function ChartCard({
         <p className="mt-2 text-sm text-slate-400">{subtitle}</p>
       </div>
       <div className="rounded-[24px] border border-white/10 bg-slate-950/60 p-4">
-        <div className="h-[280px] w-full">{children}</div>
+        <div className="h-[320px] w-full">
+          {empty ? (
+            <div className="flex h-full items-center justify-center text-sm text-slate-500">
+              선택한 범위에 데이터가 없습니다.
+            </div>
+          ) : (
+            children
+          )}
+        </div>
       </div>
     </section>
   );
@@ -99,12 +110,42 @@ function DashboardTooltip({
   );
 }
 
-export default function AdminDashboard({ dashboard }: { dashboard: DashboardStats }) {
-  const [range, setRange] = useState<RangeKey>("7d");
+type BrushRange = {
+  startIndex: number;
+  endIndex: number;
+};
 
-  const chartData = useMemo(() => {
-    const take = range === "7d" ? 7 : 30;
+function getTakeCount(range: RangeKey) {
+  return range === "7d" ? 7 : range === "30d" ? 30 : 365;
+}
+
+function getDefaultWindow(range: RangeKey, length: number) {
+  return Math.min(length, range === "7d" ? 7 : range === "30d" ? 14 : 30);
+}
+
+function getDefaultBrushRange(range: RangeKey, length: number): BrushRange | null {
+  if (length === 0) {
+    return null;
+  }
+
+  const windowSize = getDefaultWindow(range, length);
+
+  return {
+    startIndex: Math.max(0, length - windowSize),
+    endIndex: length - 1,
+  };
+}
+
+export default function AdminDashboard({ dashboard }: { dashboard: DashboardStats }) {
+  const [range, setRange] = useState<RangeKey>("30d");
+  const [brushRange, setBrushRange] = useState<BrushRange | null>(() =>
+    getDefaultBrushRange("30d", Math.min(dashboard.trends.length, getTakeCount("30d"))),
+  );
+
+  const baseData = useMemo(() => {
+    const take = getTakeCount(range);
     return dashboard.trends.slice(-take).map((item) => ({
+      rawDate: item.date,
       date: compactDateLabel(item.date),
       conversions: item.conversionsSucceeded,
       failures: item.conversionsFailed,
@@ -114,13 +155,58 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
     }));
   }, [dashboard.trends, range]);
 
-  const failedLogs = useMemo(
-    () =>
-      dashboard.recentLogs.filter(
-        (log) => log.type === "image_job_error" || log.type === "pdf_job_error",
-      ),
-    [dashboard.recentLogs],
-  );
+  const chartData = useMemo(() => {
+    if (!brushRange) {
+      return baseData;
+    }
+
+    return baseData.slice(brushRange.startIndex, brushRange.endIndex + 1);
+  }, [baseData, brushRange]);
+
+  const rangeLabel = useMemo(() => {
+    if (chartData.length === 0) {
+      return "선택된 기간 없음";
+    }
+
+    return `${chartData[0].rawDate} ~ ${chartData[chartData.length - 1].rawDate}`;
+  }, [chartData]);
+
+  const failedLogs = useMemo(() => {
+    if (chartData.length === 0) {
+      return [];
+    }
+
+    const startDate = chartData[0].rawDate;
+    const endDate = chartData[chartData.length - 1].rawDate;
+
+    return dashboard.recentLogs.filter((log) => {
+      if (log.type !== "image_job_error" && log.type !== "pdf_job_error") {
+        return false;
+      }
+
+      const logDate = log.timestamp.slice(0, 10);
+      return logDate >= startDate && logDate <= endDate;
+    });
+  }, [chartData, dashboard.recentLogs]);
+
+  const handleBrushChange = (nextRange: BrushRange | null | undefined) => {
+    if (
+      !nextRange ||
+      typeof nextRange.startIndex !== "number" ||
+      typeof nextRange.endIndex !== "number"
+    ) {
+      return;
+    }
+
+    setBrushRange(nextRange);
+  };
+
+  const handleRangeChange = (nextRange: RangeKey) => {
+    setRange(nextRange);
+    setBrushRange(
+      getDefaultBrushRange(nextRange, Math.min(dashboard.trends.length, getTakeCount(nextRange))),
+    );
+  };
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-16 text-slate-50">
@@ -140,10 +226,10 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
               메인으로
             </Link>
             <div className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1.5">
-              {(["7d", "30d"] as const).map((key) => (
+              {(["7d", "30d", "365d"] as const).map((key) => (
                 <button
                   key={key}
-                  onClick={() => setRange(key)}
+                  onClick={() => handleRangeChange(key)}
                   className={`rounded-xl px-4 py-2 text-xs font-black tracking-[0.18em] transition-colors ${
                     range === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-slate-200"
                   }`}
@@ -153,6 +239,12 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-5">
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Selected Range</div>
+          <div className="mt-2 text-lg font-bold text-white">{rangeLabel}</div>
+          <p className="mt-2 text-sm text-slate-400">그래프 하단의 브러시를 드래그해서 표시 기간을 조절할 수 있습니다.</p>
         </div>
 
         {!dashboard.enabled && (
@@ -172,12 +264,9 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
         </div>
 
         <div className="mt-10 grid gap-6 xl:grid-cols-2">
-          <ChartCard
-            title="Conversion Trend"
-            subtitle={`최근 ${range === "7d" ? "7일" : "30일"} 변환 성공 추이`}
-          >
+          <ChartCard title="Conversion Trend" subtitle={`${rangeLabel} 변환 성공 추이`} empty={baseData.length === 0}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
+              <LineChart data={baseData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
                 <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                 <XAxis dataKey="date" stroke="#94a3b8" tickLine={false} axisLine={false} />
                 <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
@@ -188,17 +277,23 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
                   name="성공"
                   stroke="#38bdf8"
                   strokeWidth={3}
-                  dot={{ r: 4, fill: "#38bdf8", strokeWidth: 0 }}
+                  dot={false}
                   activeDot={{ r: 6, fill: "#e0f2fe", stroke: "#38bdf8", strokeWidth: 2 }}
+                />
+                <Brush
+                  dataKey="date"
+                  height={28}
+                  stroke="#38bdf8"
+                  travellerWidth={14}
+                  startIndex={brushRange?.startIndex}
+                  endIndex={brushRange?.endIndex}
+                  onChange={handleBrushChange}
                 />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard
-            title="Success vs Failure"
-            subtitle={`최근 ${range === "7d" ? "7일" : "30일"} 성공/실패 비교`}
-          >
+          <ChartCard title="Success vs Failure" subtitle={`${rangeLabel} 성공/실패 비교`} empty={chartData.length === 0}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barGap={10}>
                 <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
@@ -214,10 +309,7 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-          <ChartCard
-            title="Traffic Trend"
-            subtitle={`최근 ${range === "7d" ? "7일" : "30일"} 방문 추이`}
-          >
+          <ChartCard title="Traffic Trend" subtitle={`${rangeLabel} 방문 추이`} empty={chartData.length === 0}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
                 <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
@@ -237,10 +329,7 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard
-            title="Tool Mix"
-            subtitle={`최근 ${range === "7d" ? "7일" : "30일"} 도구별 성공 수`}
-          >
+          <ChartCard title="Tool Mix" subtitle={`${rangeLabel} 도구별 성공 수`} empty={chartData.length === 0}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barGap={10}>
                 <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
@@ -274,7 +363,7 @@ export default function AdminDashboard({ dashboard }: { dashboard: DashboardStat
                 {failedLogs.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-6 text-slate-500">
-                      아직 실패한 변환 로그가 없습니다.
+                      선택한 범위에 실패한 변환 로그가 없습니다.
                     </td>
                   </tr>
                 )}
