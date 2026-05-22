@@ -17,7 +17,7 @@ export async function getFeedbackSubmissions(): Promise<FeedbackSubmission[]> {
     return [];
   }
 
-  const entries = await redis.lrange<string[]>(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
+  const entries = await redis.lrange<string>(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
 
   return (entries ?? [])
     .map((entry) => {
