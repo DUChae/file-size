@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { QueueItem, QueueStatus, ImageCategory, OutputFormat, WebAspectRatio } from "@/types/image";
+import { QueueItem, QueueStatus, ImageCategory, OutputFormat } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 
@@ -14,7 +14,8 @@ export default function ImageOptimizer() {
   const [isDragging, setIsDragging] = useState(false);
   const [globalCategory, setGlobalCategory] = useState<ImageCategory>("screenshot");
   const [globalFormat, setGlobalFormat] = useState<OutputFormat>("original");
-  const [globalWebAspectRatio, setGlobalWebAspectRatio] = useState<WebAspectRatio>("");
+  const [globalWebWidth, setGlobalWebWidth] = useState("");
+  const [globalWebHeight, setGlobalWebHeight] = useState("");
   const processingRef = useRef<number>(0);
 
   const formatSize = (bytes: number) => {
@@ -37,11 +38,12 @@ export default function ImageOptimizer() {
         status: "queued",
         category: globalCategory,
         targetFormat: globalFormat,
-        webAspectRatio: globalWebAspectRatio,
+        webWidth: globalWebWidth,
+        webHeight: globalWebHeight,
       }));
 
     setQueue(prev => [...prev, ...newItems]);
-  }, [queue.length, globalCategory, globalFormat, globalWebAspectRatio]);
+  }, [queue.length, globalCategory, globalFormat, globalWebWidth, globalWebHeight]);
 
   const processQueue = useCallback(async () => {
     if (processingRef.current >= CONCURRENCY) return;
@@ -52,7 +54,7 @@ export default function ImageOptimizer() {
       (async () => {
         try {
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "compressing" } : it));
-          const res = await compressImage(nextItem.originalFile, nextItem.id, nextItem.category, nextItem.targetFormat, nextItem.webAspectRatio);
+          const res = await compressImage(nextItem.originalFile, nextItem.id, nextItem.category, nextItem.targetFormat, nextItem.webWidth, nextItem.webHeight);
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "done", optimizedFilename: res.optimizedFilename, optimizedUrl: res.optimizedUrl, optimizedDownloadUrl: res.optimizedDownloadUrl, optimizedSize: res.optimizedSize, reductionRate: ((res.originalSize - res.optimizedSize) / res.originalSize) * 100 } : it));
         } catch (e) {
           setQueue(q => q.map(it => it.id === nextItem.id ? { ...it, status: "error", error: e instanceof Error ? e.message : "Error" } : it));
@@ -105,18 +107,27 @@ export default function ImageOptimizer() {
           </div>
           {globalCategory === "web" && (
             <div className="mt-6">
-              <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Web Aspect Ratio</h4>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Web Output Size</h4>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 <input
-                  value={globalWebAspectRatio}
-                  onChange={(event) => setGlobalWebAspectRatio(event.target.value)}
-                  placeholder="e.g. 16:9, 4:3, 1:1"
-                  className="w-full bg-transparent text-sm font-bold text-white outline-none placeholder:text-slate-500"
+                  value={globalWebWidth}
+                  onChange={(event) => setGlobalWebWidth(event.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="1200"
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm font-bold text-white outline-none placeholder:text-slate-500"
                 />
-                <p className="mt-2 text-xs font-medium text-slate-500">
-                  Leave empty to keep the original ratio.
-                </p>
+                <span className="text-sm font-black text-slate-500">X</span>
+                <input
+                  value={globalWebHeight}
+                  onChange={(event) => setGlobalWebHeight(event.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="1263"
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm font-bold text-white outline-none placeholder:text-slate-500"
+                />
               </div>
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                Leave either field empty to keep the original ratio. Example: `1200 X 1263`
+              </p>
             </div>
           )}
         </div>

@@ -1,12 +1,13 @@
 import { upload } from "@vercel/blob/client";
-import { CompressionRequest, CompressionResponse, ImageCategory, OutputFormat, WebAspectRatio } from "@/types/image";
+import { CompressionRequest, CompressionResponse, ImageCategory, OutputFormat } from "@/types/image";
 
 export async function compressImage(
   file: File,
   id: string,
   category: ImageCategory,
   targetFormat: OutputFormat,
-  webAspectRatio: WebAspectRatio
+  webWidth: string,
+  webHeight: string
 ): Promise<{
   optimizedFilename: string;
   optimizedUrl: string;
@@ -27,7 +28,8 @@ export async function compressImage(
     mimeType: file.type,
     category,
     targetFormat,
-    webAspectRatio,
+    webWidth: webWidth.trim() ? Number(webWidth) : undefined,
+    webHeight: webHeight.trim() ? Number(webHeight) : undefined,
     uploadId: id,
   };
 

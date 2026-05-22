@@ -3,25 +3,16 @@ import { del, put } from "@vercel/blob";
 import sharp from "sharp";
 import { CompressionRequest, CompressionResponse } from "@/types/image";
 
-function parseWebAspectRatio(value: string) {
-  const normalized = value.trim();
-  if (!normalized) {
+function parseWebSizeDimension(value: number | undefined, label: string) {
+  if (value === undefined) {
     return null;
   }
 
-  const match = normalized.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
-  if (!match) {
-    throw new Error("Aspect ratio must be in `width:height` format.");
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be greater than 0.`);
   }
 
-  const widthRatio = Number(match[1]);
-  const heightRatio = Number(match[2]);
-
-  if (!Number.isFinite(widthRatio) || !Number.isFinite(heightRatio) || widthRatio <= 0 || heightRatio <= 0) {
-    throw new Error("Aspect ratio values must be greater than 0.");
-  }
-
-  return { widthRatio, heightRatio };
+  return Math.round(value);
 }
 
 export async function POST(req: NextRequest) {
@@ -29,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload: CompressionRequest = await req.json();
-    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webAspectRatio, uploadId } = payload;
+    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webWidth, webHeight, uploadId } = payload;
     sourceUrl = requestSourceUrl;
 
     const sourceResponse = await fetch(sourceUrl);
@@ -92,16 +83,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (category === "web") {
-      const parsedAspectRatio = parseWebAspectRatio(webAspectRatio);
-      if (parsedAspectRatio) {
-        const targetWidth = resizeWidth ?? 1200;
-        const targetHeight = Math.round((targetWidth * parsedAspectRatio.heightRatio) / parsedAspectRatio.widthRatio);
-        const safeTargetHeight = Math.max(targetHeight, 1);
-      const background = outputMime === "image/png"
-        ? { r: 255, g: 255, b: 255, alpha: 0 }
-        : { r: 255, g: 255, b: 255, alpha: 1 };
+      const targetWidth = parseWebSizeDimension(webWidth, "Width");
+      const targetHeight = parseWebSizeDimension(webHeight, "Height");
+      if (targetWidth && targetHeight) {
+        const background = outputMime === "image/png"
+          ? { r: 255, g: 255, b: 255, alpha: 0 }
+          : { r: 255, g: 255, b: 255, alpha: 1 };
 
-        sharpInstance = sharpInstance.resize(targetWidth, safeTargetHeight, {
+        sharpInstance = sharpInstance.resize(targetWidth, targetHeight, {
           fit: "contain",
           position: "centre",
           background,

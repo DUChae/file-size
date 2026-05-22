@@ -4,8 +4,6 @@ export type ImageCategory = "screenshot" | "photo" | "web" | "high-quality";
 
 export type OutputFormat = "original" | "png" | "jpeg";
 
-export type WebAspectRatio = string;
-
 export interface QueueItem {
   id: string;
   originalFile: File;
@@ -16,7 +14,8 @@ export interface QueueItem {
   error?: string;
   category: ImageCategory;
   targetFormat: OutputFormat;
-  webAspectRatio: WebAspectRatio;
+  webWidth: string;
+  webHeight: string;
   optimizedFilename?: string;
   optimizedUrl?: string;
   optimizedDownloadUrl?: string;
@@ -28,7 +27,8 @@ export interface CompressionRequest {
   mimeType: string;
   category: ImageCategory;
   targetFormat: OutputFormat;
-  webAspectRatio: WebAspectRatio;
+  webWidth?: number;
+  webHeight?: number;
   uploadId: string;
 }
 
