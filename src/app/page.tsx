@@ -36,8 +36,8 @@ export default function Home() {
             File Optimizer.
           </h1>
           <p className="max-w-2xl mx-auto text-lg md:text-xl text-slate-400 font-medium leading-relaxed">
-            이미지 최적화 엔진. <br />
-            화질을 유지하며 용량만 제거
+            필요한 파일의 압축 프로그램 혹은 변환하고 싶은 파일이 있으면
+            Feedback을 남겨주세요.....
           </p>
         </div>
       </header>
