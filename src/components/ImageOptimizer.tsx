@@ -9,14 +9,19 @@ const MAX_FILES = 10;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const CONCURRENCY = 2;
 
-export default function ImageOptimizer() {
+export default function ImageOptimizer({ category, forcedFormat }: { category: ImageCategory, forcedFormat?: "webp" | "avif" }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [globalCategory, setGlobalCategory] = useState<ImageCategory>("screenshot");
-  const [globalFormat, setGlobalFormat] = useState<OutputFormat>("original");
+  const [globalFormat, setGlobalFormat] = useState<OutputFormat>(forcedFormat || "original");
   const [globalWebWidth, setGlobalWebWidth] = useState("");
   const [globalWebHeight, setGlobalWebHeight] = useState("");
   const processingRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (forcedFormat) {
+      setGlobalFormat(forcedFormat);
+    }
+  }, [forcedFormat]);
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return "0 B";
@@ -30,20 +35,20 @@ export default function ImageOptimizer() {
     const fileArray = Array.from(files);
     if (queue.length + fileArray.length > MAX_FILES) return;
 
-    const newItems: QueueItem[] = fileArray.filter(f => ["image/jpeg", "image/jpg", "image/png"].includes(f.type) && f.size <= MAX_FILE_SIZE)
+    const newItems: QueueItem[] = fileArray.filter(f => ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(f.type) || f.name.toLowerCase().endsWith('.avif'))
       .map(file => ({
         id: Math.random().toString(36).substring(2, 9),
         originalFile: file,
         originalSize: file.size,
         status: "queued",
-        category: globalCategory,
-        targetFormat: globalFormat,
+        category: category,
+        targetFormat: forcedFormat || globalFormat,
         webWidth: globalWebWidth,
         webHeight: globalWebHeight,
       }));
 
     setQueue(prev => [...prev, ...newItems]);
-  }, [queue.length, globalCategory, globalFormat, globalWebWidth, globalWebHeight]);
+  }, [queue.length, category, globalFormat, globalWebWidth, globalWebHeight, forcedFormat]);
 
   const processQueue = useCallback(async () => {
     if (processingRef.current >= CONCURRENCY) return;
@@ -78,34 +83,23 @@ export default function ImageOptimizer() {
       {/* Settings Panel - Ultra Glass */}
       <div className="glass-panel rounded-3xl p-8 mb-12 flex flex-col md:flex-row items-start gap-10">
         <div className="flex-[1.4] w-full">
-          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Mode Configuration</h4>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            {(['screenshot', 'photo', 'web', 'high-quality'] as const).map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setGlobalCategory(cat)}
-                className={`px-3 py-2.5 rounded-xl text-[12px] font-bold border transition-all ${
-                  globalCategory === cat 
-                    ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20" 
-                    : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
-                }`}
-              >
-                {cat === 'screenshot' && 'Screenshot'}
-                {cat === 'photo' && 'Photography'}
-                {cat === 'web' && 'Web Engine'}
-                {cat === 'high-quality' && 'Lossless'}
-              </button>
-            ))}
-          </div>
-          <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-4 min-h-[70px] flex items-center">
+          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Selected Mode</h4>
+          <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-6 min-h-[70px] flex flex-col justify-center">
+            <div className="text-sm font-black text-white uppercase tracking-widest mb-2">
+              {forcedFormat ? `Converter: ${forcedFormat.toUpperCase()}` : category}
+            </div>
             <p className="text-[13px] text-blue-200 leading-relaxed font-medium">
-              {globalCategory === 'screenshot' && "📄 텍스트 가독성을 유지하며 배경 용량을 극단적으로 줄입니다. (PNG 최적화 특화)"}
-              {globalCategory === 'photo' && "🖼️ 풍경이나 인물 사진의 질감을 살리면서 용량을 효율적으로 압축합니다. (JPEG/JPG 특화)"}
-              {globalCategory === 'web' && "🌐 빠른 웹 로딩을 위해 품질과 크기를 공격적으로 조정합니다. (최대 1200px 리사이즈 포함)"}
-              {globalCategory === 'high-quality' && "✨ 육안상 손실 없이 불필요한 데이터만 제거하여 원본 품질을 보관합니다."}
+              {forcedFormat ? `입력 파일을 ${forcedFormat.toUpperCase()} 포맷으로 변환하고 용량을 최적화합니다.` : (
+                <>
+                  {category === 'screenshot' && "📄 텍스트 가독성을 유지하며 배경 용량을 극단적으로 줄입니다. (PNG 최적화 특화)"}
+                  {category === 'photo' && "🖼️ 풍경이나 인물 사진의 질감을 살리면서 용량을 효율적으로 압축합니다. (JPEG/JPG 특화)"}
+                  {category === 'web' && "🌐 빠른 웹 로딩을 위해 품질과 크기를 공격적으로 조정합니다. (최대 1200px 리사이즈 포함)"}
+                  {category === 'high-quality' && "✨ 육안상 손실 없이 불필요한 데이터만 제거하여 원본 품질을 보관합니다."}
+                </>
+              )}
             </p>
           </div>
-          {globalCategory === "web" && (
+          {category === "web" && (
             <div className="mt-6">
               <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Web Output Size</h4>
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -134,13 +128,14 @@ export default function ImageOptimizer() {
         
         <div className="flex-1 w-full">
           <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Output Format</h4>
-          <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-6">
-            {(['original', 'png', 'jpeg'] as const).map((fmt) => (
+          <div className="flex flex-wrap bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-6 gap-1">
+            {(['original', 'png', 'jpeg', 'webp', 'avif'] as const).map((fmt) => (
               <button
                 key={fmt}
-                onClick={() => setGlobalFormat(fmt)}
-                className={`flex-1 py-2 rounded-xl text-[11px] font-black transition-all ${
-                  globalFormat === fmt ? "bg-white text-slate-900" : "text-slate-500 hover:text-slate-300"
+                onClick={() => !forcedFormat && setGlobalFormat(fmt)}
+                disabled={!!forcedFormat}
+                className={`flex-1 min-w-[60px] py-2 rounded-xl text-[11px] font-black transition-all ${
+                  globalFormat === fmt ? "bg-white text-slate-900" : "text-slate-500 hover:text-slate-300 disabled:opacity-30 disabled:hover:text-slate-500"
                 }`}
               >
                 {fmt.toUpperCase()}
@@ -152,6 +147,8 @@ export default function ImageOptimizer() {
               {globalFormat === 'original' && "• 업로드한 파일의 확장자를 그대로 유지합니다."}
               {globalFormat === 'png' && "• 투명도가 필요하거나 선명한 텍스트가 중요한 경우 권장합니다."}
               {globalFormat === 'jpeg' && "• 색상이 화려한 사진의 용량을 줄일 때 가장 효율적입니다."}
+              {globalFormat === 'webp' && "• 현대적인 웹 환경에서 높은 압축률과 고품질을 동시에 제공합니다."}
+              {globalFormat === 'avif' && "• 차세대 포맷으로 WebP보다 뛰어난 압축 효율을 보여주지만 구형 브라우저에서 미지원할 수 있습니다."}
             </p>
           </div>
         </div>
@@ -167,7 +164,7 @@ export default function ImageOptimizer() {
           isDragging ? "animate-glow bg-blue-500/5 scale-[0.98]" : "bg-slate-950/40 hover:bg-slate-900/40 hover:border-white/10"
         }`}
       >
-        <input id="fileInput" type="file" multiple accept=".png,.jpg,.jpeg" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+        <input id="fileInput" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.avif" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
         <div className="relative pointer-events-none">
           <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-500/20 group-hover:scale-110 transition-transform">
             <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -175,7 +172,7 @@ export default function ImageOptimizer() {
             </svg>
           </div>
           <h3 className="text-3xl font-black text-white tracking-tighter mb-3">DROP ASSETS HERE.</h3>
-          <p className="text-slate-500 font-bold text-sm tracking-tight uppercase opacity-60">Max 20MB / PNG, JPG, JPEG</p>
+          <p className="text-slate-500 font-bold text-sm tracking-tight uppercase opacity-60">Max 20MB / PNG, JPG, WebP, AVIF</p>
         </div>
       </div>
 

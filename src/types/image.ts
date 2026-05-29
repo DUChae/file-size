@@ -2,7 +2,7 @@ export type QueueStatus = "queued" | "uploading" | "compressing" | "done" | "err
 
 export type ImageCategory = "screenshot" | "photo" | "web" | "high-quality";
 
-export type OutputFormat = "original" | "png" | "jpeg";
+export type OutputFormat = "original" | "png" | "jpeg" | "webp" | "avif";
 
 export interface QueueItem {
   id: string;

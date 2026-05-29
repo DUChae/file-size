@@ -57,6 +57,12 @@ export async function POST(req: NextRequest) {
     } else if (targetFormat === "jpeg") {
       outputMime = "image/jpeg";
       outputExt = "jpg";
+    } else if (targetFormat === "webp") {
+      outputMime = "image/webp";
+      outputExt = "webp";
+    } else if (targetFormat === "avif") {
+      outputMime = "image/avif";
+      outputExt = "avif";
     }
 
     let quality = 82;
@@ -95,7 +101,7 @@ export async function POST(req: NextRequest) {
       const targetWidth = parseWebSizeDimension(webWidth, "Width");
       const targetHeight = parseWebSizeDimension(webHeight, "Height");
       if (targetWidth && targetHeight) {
-        const background = outputMime === "image/png"
+        const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif")
           ? { r: 255, g: 255, b: 255, alpha: 0 }
           : { r: 255, g: 255, b: 255, alpha: 1 };
 
@@ -116,6 +122,23 @@ export async function POST(req: NextRequest) {
           compressionLevel: 9,
           palette: category !== "high-quality",
           colors: 256,
+        })
+        .toBuffer();
+    } else if (outputMime === "image/webp") {
+      outputBuffer = await sharpInstance
+        .webp({
+          quality,
+          effort: 6,
+          lossless: category === "high-quality",
+        })
+        .toBuffer();
+    } else if (outputMime === "image/avif") {
+      outputBuffer = await sharpInstance
+        .avif({
+          quality: quality - 10, // AVIF usually needs lower quality value for same perceived quality
+          effort: 4,
+          chromaSubsampling: "4:2:0",
+          lossless: category === "high-quality",
         })
         .toBuffer();
     } else {
