@@ -165,22 +165,22 @@ export default function PdfToPngConverter() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-16 py-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 pb-12 border-b border-white/5">
-        <div className="space-y-4 max-w-xl">
-          <div className="space-y-2">
-            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] opacity-80 flex items-center gap-2">
-              <FileText className="w-3 h-3" />
+    <div className="max-w-5xl mx-auto space-y-20 py-12">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-12 pb-16 border-b border-white/5">
+        <div className="space-y-6 max-w-2xl">
+          <div className="space-y-3">
+            <h4 className="text-xs font-black text-blue-500 uppercase tracking-[0.4em] opacity-80 flex items-center gap-2">
+              <FileText className="w-4 h-4" />
               Document Processing
             </h4>
-            <h2 className="text-3xl font-black text-white tracking-ultra-tight uppercase">PDF to PNG</h2>
+            <h2 className="text-4xl font-black text-white tracking-ultra-tight uppercase">PDF to PNG</h2>
           </div>
-          <p className="text-sm text-slate-500 font-medium leading-relaxed">
-            고해상도 엔진을 통해 PDF 문서를 픽셀 단위로 분석하고 고품질 PNG 이미지로 변환합니다. 모든 페이지는 단일 ZIP 패키지로 자동 구성됩니다.
+          <p className="text-base text-slate-400 font-medium leading-relaxed">
+            고해상도 렌더링 엔진을 통해 PDF 문서를 정밀하게 분석하고 고품질 PNG 이미지로 변환합니다. 모든 페이지는 최적화된 상태로 단일 ZIP 패키지에 구성되어 즉시 다운로드 가능합니다.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-4 shrink-0">
           <label className="cursor-pointer">
             <input
               type="file"
@@ -188,9 +188,9 @@ export default function PdfToPngConverter() {
               className="hidden"
               onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
             />
-            <Button variant="outline" size="lg" asChild className="rounded-full border-white/10 hover:bg-white/5 text-white h-12 px-8">
-              <div className="cursor-pointer font-bold text-xs">
-                <FileSearch className="w-4 h-4 mr-2" />
+            <Button variant="outline" size="lg" asChild className="rounded-full border-white/10 hover:bg-white/5 text-white h-14 px-10">
+              <div className="cursor-pointer font-black text-xs tracking-widest">
+                <FileSearch className="w-5 h-5 mr-3" />
                 SELECT PDF
               </div>
             </Button>
@@ -200,16 +200,16 @@ export default function PdfToPngConverter() {
             size="lg" 
             onClick={handleConvert}
             disabled={!file || status === "converting"}
-            className="rounded-full h-12 px-8 text-xs font-bold"
+            className="rounded-full h-14 px-10 text-xs font-black tracking-widest shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-105"
           >
             {status === "converting" ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-5 h-5 mr-3 animate-spin" />
                 PROCESSING
               </>
             ) : (
               <>
-                <FileOutput className="w-4 h-4 mr-2" />
+                <FileOutput className="w-5 h-5 mr-3" />
                 CONVERT NOW
               </>
             )}
@@ -217,49 +217,49 @@ export default function PdfToPngConverter() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
-          <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Source Document</div>
-          <div className="text-xs text-white font-bold truncate flex items-center gap-2">
-            {file ? <div className="w-1.5 h-1.5 rounded-full bg-blue-500" /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />}
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+          <div className="text-xs font-black text-slate-600 uppercase tracking-widest">Source Document</div>
+          <div className="text-sm text-white font-bold truncate flex items-center gap-3">
+            {file ? <div className="w-2 h-2 rounded-full bg-blue-500" /> : <div className="w-2 h-2 rounded-full bg-slate-800" />}
             {fileSummary ?? "No selection"}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
-          <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Page Count</div>
-          <div className="text-xl font-black text-white">{pageCount ?? "--"}</div>
+        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+          <div className="text-xs font-black text-slate-600 uppercase tracking-widest">Page Count</div>
+          <div className="text-3xl font-black text-white">{pageCount ?? "--"}</div>
         </div>
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
-          <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Job Status</div>
+        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+          <div className="text-xs font-black text-slate-600 uppercase tracking-widest">Job Status</div>
           <div className={cn(
-            "text-[10px] font-black flex items-center gap-2 uppercase tracking-wide",
-            status === 'done' ? "text-green-500" : status === 'error' ? "text-red-500" : status === 'converting' ? "text-blue-500" : "text-slate-600"
+            "text-xs font-black flex items-center gap-3 uppercase tracking-widest",
+            status === 'done' ? "text-green-500" : status === 'error' ? "text-red-500" : status === 'converting' ? "text-blue-500" : "text-slate-500"
           )}>
             {status === "idle" && "Ready"}
-            {status === "converting" && <Loader2 className="w-3 h-3 animate-spin" />}
+            {status === "converting" && <Loader2 className="w-4 h-4 animate-spin" />}
             {status === "converting" && "Converting..."}
-            {status === "done" && <CheckCircle2 className="w-3 h-3" />}
+            {status === "done" && <CheckCircle2 className="w-4 h-4" />}
             {status === "done" && "Complete"}
-            {status === "error" && <AlertCircle className="w-3 h-3" />}
+            {status === "error" && <AlertCircle className="w-4 h-4" />}
             {status === "error" && "Engine Error"}
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/10 bg-red-500/[0.03] p-5 flex items-start gap-4 animate-fade-in">
-          <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <h5 className="text-xs font-black text-red-500 uppercase tracking-wider">System Alert</h5>
-            <p className="text-xs text-red-200/60 font-medium">{error}</p>
+        <div className="rounded-2xl border border-red-500/10 bg-red-500/[0.04] p-8 flex items-start gap-6 animate-fade-in shadow-2xl">
+          <AlertCircle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
+          <div className="space-y-2">
+            <h5 className="text-sm font-black text-red-500 uppercase tracking-widest">System Alert</h5>
+            <p className="text-base text-red-200/80 font-medium leading-relaxed">{error}</p>
           </div>
         </div>
       )}
 
-      <div className="flex items-center gap-4 text-slate-700">
-        <Info className="w-3.5 h-3.5" />
-        <p className="text-[10px] font-bold uppercase tracking-[0.1em]">
-          Optimized for documents under 20MB. Processing happens locally in-browser.
+      <div className="flex items-center gap-6 text-slate-600 bg-white/[0.01] p-6 rounded-2xl border border-white/5">
+        <Info className="w-5 h-5 shrink-0" />
+        <p className="text-xs font-bold uppercase tracking-[0.15em] leading-relaxed">
+          Optimized for professional documents under 20MB. All processing remains private and occurs locally within your secure browser environment.
         </p>
       </div>
     </div>
