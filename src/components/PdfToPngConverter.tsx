@@ -3,6 +3,9 @@
 import React, { useMemo, useState } from "react";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { Button } from "@/components/ui/button";
+import { FileSearch, FileOutput, Download, Loader2, CheckCircle2, AlertCircle, Info, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const MAX_PDF_SIZE = 20 * 1024 * 1024;
 
@@ -47,7 +50,7 @@ export default function PdfToPngConverter() {
 
   const fileSummary = useMemo(() => {
     if (!file) return null;
-    return `${file.name} · ${formatSize(file.size)}`;
+    return `${file.name} (${formatSize(file.size)})`;
   }, [file]);
 
   const handleFileChange = (nextFile: File | null) => {
@@ -162,60 +165,103 @@ export default function PdfToPngConverter() {
   };
 
   return (
-    <div className="glass-panel rounded-3xl p-8">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
-        <div className="max-w-2xl">
-          <h2 className="text-2xl font-black text-white tracking-tighter uppercase mb-3">PDF to PNG</h2>
-          <p className="text-sm text-slate-400 leading-relaxed">
-            PDF 각 페이지를 브라우저에서 렌더링한 뒤 PNG로 변환하고 ZIP 파일로 내려줍니다.
+    <div className="max-w-4xl mx-auto space-y-16 py-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 pb-12 border-b border-white/5">
+        <div className="space-y-4 max-w-xl">
+          <div className="space-y-2">
+            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] opacity-80 flex items-center gap-2">
+              <FileText className="w-3 h-3" />
+              Document Processing
+            </h4>
+            <h2 className="text-3xl font-black text-white tracking-ultra-tight uppercase">PDF to PNG</h2>
+          </div>
+          <p className="text-sm text-slate-500 font-medium leading-relaxed">
+            고해상도 엔진을 통해 PDF 문서를 픽셀 단위로 분석하고 고품질 PNG 이미지로 변환합니다. 모든 페이지는 단일 ZIP 패키지로 자동 구성됩니다.
           </p>
         </div>
 
-        <div className="flex gap-3">
-          <label className="px-5 py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-black text-slate-200 cursor-pointer hover:bg-white/10 transition-colors">
-            SELECT PDF
+        <div className="flex items-center gap-3 shrink-0">
+          <label className="cursor-pointer">
             <input
               type="file"
               accept=".pdf,application/pdf"
               className="hidden"
               onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
             />
+            <Button variant="outline" size="lg" asChild className="rounded-full border-white/10 hover:bg-white/5 text-white h-12 px-8">
+              <div className="cursor-pointer font-bold text-xs">
+                <FileSearch className="w-4 h-4 mr-2" />
+                SELECT PDF
+              </div>
+            </Button>
           </label>
-          <button
+          <Button 
+            variant="blue" 
+            size="lg" 
             onClick={handleConvert}
             disabled={!file || status === "converting"}
-            className="px-5 py-3 rounded-2xl bg-blue-600 text-white text-sm font-black disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-500 transition-colors"
+            className="rounded-full h-12 px-8 text-xs font-bold"
           >
-            {status === "converting" ? "CONVERTING" : "EXPORT PNG"}
-          </button>
+            {status === "converting" ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                PROCESSING
+              </>
+            ) : (
+              <>
+                <FileOutput className="w-4 h-4 mr-2" />
+                CONVERT NOW
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Input</div>
-          <div className="text-sm text-white font-bold break-all">{fileSummary ?? "No PDF selected"}</div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
+          <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Source Document</div>
+          <div className="text-xs text-white font-bold truncate flex items-center gap-2">
+            {file ? <div className="w-1.5 h-1.5 rounded-full bg-blue-500" /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />}
+            {fileSummary ?? "No selection"}
+          </div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Pages</div>
-          <div className="text-sm text-white font-bold">{pageCount ?? "-"}</div>
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
+          <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Page Count</div>
+          <div className="text-xl font-black text-white">{pageCount ?? "--"}</div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Status</div>
-          <div className="text-sm font-bold text-white">
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
+          <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Job Status</div>
+          <div className={cn(
+            "text-[10px] font-black flex items-center gap-2 uppercase tracking-wide",
+            status === 'done' ? "text-green-500" : status === 'error' ? "text-red-500" : status === 'converting' ? "text-blue-500" : "text-slate-600"
+          )}>
             {status === "idle" && "Ready"}
-            {status === "converting" && "Converting"}
-            {status === "done" && "Done"}
-            {status === "error" && "Error"}
+            {status === "converting" && <Loader2 className="w-3 h-3 animate-spin" />}
+            {status === "converting" && "Converting..."}
+            {status === "done" && <CheckCircle2 className="w-3 h-3" />}
+            {status === "done" && "Complete"}
+            {status === "error" && <AlertCircle className="w-3 h-3" />}
+            {status === "error" && "Engine Error"}
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-200">
-          {error}
+        <div className="rounded-xl border border-red-500/10 bg-red-500/[0.03] p-5 flex items-start gap-4 animate-fade-in">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h5 className="text-xs font-black text-red-500 uppercase tracking-wider">System Alert</h5>
+            <p className="text-xs text-red-200/60 font-medium">{error}</p>
+          </div>
         </div>
       )}
+
+      <div className="flex items-center gap-4 text-slate-700">
+        <Info className="w-3.5 h-3.5" />
+        <p className="text-[10px] font-bold uppercase tracking-[0.1em]">
+          Optimized for documents under 20MB. Processing happens locally in-browser.
+        </p>
+      </div>
     </div>
   );
 }

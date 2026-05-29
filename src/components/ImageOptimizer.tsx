@@ -1,9 +1,10 @@
-"use client";
-
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem, QueueStatus, ImageCategory, OutputFormat } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
+import { Button } from "@/components/ui/button";
+import { Upload, Download, X, Loader2, Sparkles, CheckCircle2, Info, ArrowRight, Image as ImageIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -79,153 +80,192 @@ export default function ImageOptimizer({ category, forcedFormat }: { category: I
   const isAllDone = queue.length > 0 && queue.every(i => i.status === "done" || i.status === "error");
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
-      {/* Settings Panel - Ultra Glass */}
-      <div className="glass-panel rounded-3xl p-8 mb-12 flex flex-col md:flex-row items-start gap-10">
-        <div className="flex-[1.4] w-full">
-          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Selected Mode</h4>
-          <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-6 min-h-[70px] flex flex-col justify-center">
-            <div className="text-sm font-black text-white uppercase tracking-widest mb-2">
-              {forcedFormat ? `Converter: ${forcedFormat.toUpperCase()}` : category}
+    <div className="max-w-4xl mx-auto space-y-20">
+      {/* Settings Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
+        <div className="space-y-8">
+          <div className="space-y-4">
+            <h4 className="text-[10px] font-black text-white uppercase tracking-[0.3em] opacity-40">Configuration</h4>
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black tracking-ultra-tight text-white flex items-center gap-3">
+                {forcedFormat ? (
+                  <>
+                    <span className="text-blue-500">{forcedFormat.toUpperCase()}</span> Converter
+                  </>
+                ) : (
+                  <>
+                    {category === 'screenshot' && "Screenshot Engine"}
+                    {category === 'photo' && "Photography Engine"}
+                    {category === 'web' && "Web Optimization"}
+                    {category === 'high-quality' && "Lossless Master"}
+                  </>
+                )}
+              </h3>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                {forcedFormat ? `${forcedFormat.toUpperCase()} 인코딩을 위해 최적화된 연산 모델을 사용합니다.` : (
+                  <>
+                    {category === 'screenshot' && "정밀한 엣지 보존 알고리즘으로 텍스트 가독성을 최우선으로 합니다."}
+                    {category === 'photo' && "심층 질감 분석을 통해 자연스러운 색조와 세부 수치를 보존합니다."}
+                    {category === 'web' && "성능 중심 리사이징으로 웹 코어 바이탈 지표를 개선합니다."}
+                    {category === 'high-quality' && "메타데이터 정제 및 무손실 압축으로 데이터 무결성을 보장합니다."}
+                  </>
+                )}
+              </p>
             </div>
-            <p className="text-[13px] text-blue-200 leading-relaxed font-medium">
-              {forcedFormat ? `입력 파일을 ${forcedFormat.toUpperCase()} 포맷으로 변환하고 용량을 최적화합니다.` : (
-                <>
-                  {category === 'screenshot' && "📄 텍스트 가독성을 유지하며 배경 용량을 극단적으로 줄입니다. (PNG 최적화 특화)"}
-                  {category === 'photo' && "🖼️ 풍경이나 인물 사진의 질감을 살리면서 용량을 효율적으로 압축합니다. (JPEG/JPG 특화)"}
-                  {category === 'web' && "🌐 빠른 웹 로딩을 위해 품질과 크기를 공격적으로 조정합니다. (최대 1200px 리사이즈 포함)"}
-                  {category === 'high-quality' && "✨ 육안상 손실 없이 불필요한 데이터만 제거하여 원본 품질을 보관합니다."}
-                </>
-              )}
-            </p>
           </div>
+
           {category === "web" && (
-            <div className="mt-6">
-              <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Web Output Size</h4>
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="space-y-4 pt-4 border-t border-white/5">
+              <h4 className="text-[10px] font-black text-white uppercase tracking-[0.3em] opacity-40">Output Dimensions</h4>
+              <div className="flex items-center gap-4 bg-white/[0.02] border border-white/10 rounded-xl p-1 px-3">
                 <input
                   value={globalWebWidth}
                   onChange={(event) => setGlobalWebWidth(event.target.value.replace(/[^\d]/g, ""))}
-                  placeholder="1200"
-                  inputMode="numeric"
-                  className="w-full rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm font-bold text-white outline-none placeholder:text-slate-500"
+                  placeholder="Width"
+                  className="w-full bg-transparent py-3 text-xs font-bold text-white outline-none placeholder:text-slate-700"
                 />
-                <span className="text-sm font-black text-slate-500">X</span>
+                <span className="text-[10px] font-black text-slate-700">X</span>
                 <input
                   value={globalWebHeight}
                   onChange={(event) => setGlobalWebHeight(event.target.value.replace(/[^\d]/g, ""))}
-                  placeholder="1263"
-                  inputMode="numeric"
-                  className="w-full rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm font-bold text-white outline-none placeholder:text-slate-500"
+                  placeholder="Height"
+                  className="w-full bg-transparent py-3 text-xs font-bold text-white outline-none placeholder:text-slate-700 text-right"
                 />
               </div>
-              <p className="mt-2 text-xs font-medium text-slate-500">
-                Leave either field empty to keep the original ratio. Example: `1200 X 1263`
-              </p>
             </div>
           )}
         </div>
-        
-        <div className="flex-1 w-full">
-          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Output Format</h4>
-          <div className="flex flex-wrap bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-6 gap-1">
-            {(['original', 'png', 'jpeg', 'webp', 'avif'] as const).map((fmt) => (
-              <button
-                key={fmt}
-                onClick={() => !forcedFormat && setGlobalFormat(fmt)}
-                disabled={!!forcedFormat}
-                className={`flex-1 min-w-[60px] py-2 rounded-xl text-[11px] font-black transition-all ${
-                  globalFormat === fmt ? "bg-white text-slate-900" : "text-slate-500 hover:text-slate-300 disabled:opacity-30 disabled:hover:text-slate-500"
-                }`}
-              >
-                {fmt.toUpperCase()}
-              </button>
-            ))}
+
+        <div className="space-y-8">
+          <div className="space-y-4">
+             <h4 className="text-[10px] font-black text-white uppercase tracking-[0.3em] opacity-40">Export Format</h4>
+             <div className="grid grid-cols-5 gap-1.5 p-1 bg-white/[0.03] border border-white/10 rounded-xl">
+               {(['original', 'png', 'jpeg', 'webp', 'avif'] as const).map((fmt) => (
+                <button
+                  key={fmt}
+                  onClick={() => !forcedFormat && setGlobalFormat(fmt)}
+                  disabled={!!forcedFormat}
+                  className={cn(
+                    "py-2 rounded-lg text-[9px] font-black transition-all",
+                    globalFormat === fmt 
+                      ? "bg-white text-black" 
+                      : "text-slate-600 hover:text-white disabled:opacity-20"
+                  )}
+                >
+                  {fmt === 'original' ? 'ORIG' : fmt.toUpperCase()}
+                </button>
+              ))}
+             </div>
           </div>
-          <div className="bg-white/5 border border-white/5 rounded-2xl p-4 min-h-[70px] flex items-center">
-            <p className="text-[13px] text-slate-300 leading-relaxed font-medium">
-              {globalFormat === 'original' && "• 업로드한 파일의 확장자를 그대로 유지합니다."}
-              {globalFormat === 'png' && "• 투명도가 필요하거나 선명한 텍스트가 중요한 경우 권장합니다."}
-              {globalFormat === 'jpeg' && "• 색상이 화려한 사진의 용량을 줄일 때 가장 효율적입니다."}
-              {globalFormat === 'webp' && "• 현대적인 웹 환경에서 높은 압축률과 고품질을 동시에 제공합니다."}
-              {globalFormat === 'avif' && "• 차세대 포맷으로 WebP보다 뛰어난 압축 효율을 보여주지만 구형 브라우저에서 미지원할 수 있습니다."}
+          <div className="bg-blue-600/[0.03] border border-blue-500/10 rounded-xl p-4">
+             <div className="text-[10px] font-bold text-blue-500/80 mb-1 flex items-center gap-2">
+               <Info className="w-3 h-3" />
+               SYSTEM NOTE
+             </div>
+             <p className="text-[11px] text-blue-200/60 font-medium leading-relaxed">
+              {globalFormat === 'original' && "원본 인코딩 방식을 유지하면서 메타데이터 최적화 및 용량 압축을 진행합니다."}
+              {globalFormat === 'png' && "투명도 채널(Alpha)을 보존하며 고정밀 색상 샘플링을 적용합니다."}
+              {globalFormat === 'jpeg' && "서브샘플링 제어를 통해 시각적 손실 없이 효율적인 용량 절감을 수행합니다."}
+              {globalFormat === 'webp' && "현대적 인코더를 사용하여 동일 품질 대비 JPEG 대비 최대 30% 더 낮은 용량을 제공합니다."}
+              {globalFormat === 'avif' && "최신 AOMedia 비디오 1 코덱 기반으로 최고 수준의 품질과 압축비를 구현합니다."}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Drop Zone - High Contrast & Glow */}
+      {/* Main Action Surface */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
         onClick={() => document.getElementById("fileInput")?.click()}
-        className={`group relative rounded-[40px] p-20 text-center transition-all cursor-pointer border-2 border-white/5 ${
-          isDragging ? "animate-glow bg-blue-500/5 scale-[0.98]" : "bg-slate-950/40 hover:bg-slate-900/40 hover:border-white/10"
-        }`}
+        className={cn(
+          "group relative flex flex-col items-center justify-center py-24 rounded-[40px] transition-all cursor-pointer border-2 border-dashed",
+          isDragging 
+            ? "bg-white/10 border-white scale-[0.99] shadow-[0_0_50px_rgba(255,255,255,0.1)]" 
+            : "bg-transparent border-white/5 hover:bg-white/[0.02] hover:border-white/20"
+        )}
       >
         <input id="fileInput" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.avif" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-        <div className="relative pointer-events-none">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-500/20 group-hover:scale-110 transition-transform">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
+        <div className="flex flex-col items-center space-y-6">
+          <div className="w-12 h-12 bg-white text-black rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Upload className="w-5 h-5" />
           </div>
-          <h3 className="text-3xl font-black text-white tracking-tighter mb-3">DROP ASSETS HERE.</h3>
-          <p className="text-slate-500 font-bold text-sm tracking-tight uppercase opacity-60">Max 20MB / PNG, JPG, WebP, AVIF</p>
+          <div className="text-center space-y-1">
+            <h3 className="text-lg font-bold text-white tracking-tight">Drop images to process</h3>
+            <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.2em]">MAX 20MB PER FILE</p>
+          </div>
         </div>
       </div>
 
-      {/* Queue List */}
+      {/* Processing Table */}
       {queue.length > 0 && (
-        <div className="mt-20">
-          <div className="flex justify-between items-center mb-10">
-            <h2 className="text-2xl font-black text-white tracking-tighter uppercase">Processing Queue</h2>
+        <div className="space-y-8 animate-fade-in">
+          <div className="flex justify-between items-center px-4">
+            <div className="flex items-center gap-4">
+              <h2 className="text-sm font-black text-white uppercase tracking-widest">Active Queue</h2>
+              <span className="text-[9px] font-black bg-white/5 text-slate-500 px-2 py-1 rounded border border-white/5">{queue.length} FILES</span>
+            </div>
             {isAllDone && (
-              <button onClick={() => downloadAllAsZip(queue)} className="px-8 py-3 bg-white text-slate-950 rounded-2xl text-sm font-black hover:scale-105 active:scale-95 transition-all shadow-xl shadow-white/5">
-                EXPORT ALL (.ZIP)
+              <button 
+                onClick={() => downloadAllAsZip(queue)}
+                className="flex items-center gap-2 text-[10px] font-black bg-blue-600 text-white px-5 py-2.5 rounded-full hover:bg-blue-500 transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+              >
+                <Download className="w-3.5 h-3.5" />
+                EXPORT ALL AS ZIP
               </button>
             )}
           </div>
 
-          <div className="space-y-4">
-            {queue.map((item) => (
-              <div key={item.id} className="glass-card rounded-[32px] p-6 flex items-center gap-6 animate-slide-up">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-4 mb-2">
-                    <span className="text-lg font-black text-white truncate">{item.originalFile.name}</span>
-                    <StatusBadge status={item.status} />
+          <div className="bg-white/[0.01] border border-white/5 rounded-[24px] overflow-hidden">
+            <div className="divide-y divide-white/[0.03]">
+              {queue.map((item) => (
+                <div key={item.id} className="p-5 flex items-center gap-8 group hover:bg-white/[0.01] transition-colors">
+                  <div className="flex-1 min-w-0 flex items-center gap-6">
+                    <div className="w-10 h-10 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-center shrink-0">
+                      <ImageIcon className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <span className="text-xs font-bold text-white truncate">{item.originalFile.name}</span>
+                      <div className="flex items-center gap-2">
+                         <StatusBadge status={item.status} />
+                         <span className="text-[9px] font-bold text-slate-700 uppercase tracking-widest">{formatSize(item.originalSize)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-4 text-[11px] font-black text-slate-500 uppercase tracking-widest">
-                    <span>In: {formatSize(item.originalSize)}</span>
-                    {item.optimizedSize && <span className="text-blue-400">Out: {formatSize(item.optimizedSize)}</span>}
+
+                  <div className="hidden sm:flex flex-col items-end gap-1 min-w-[120px]">
+                    <div className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Efficiency</div>
+                    <div className={cn(
+                      "text-lg font-black tracking-tighter",
+                      item.reductionRate !== undefined ? "text-white" : "text-slate-900"
+                    )}>
+                      {item.reductionRate !== undefined ? `-${item.reductionRate.toFixed(1)}%` : "00.0%"}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-center min-w-[40px]">
+                    {item.status === "done" ? (
+                      <button 
+                        onClick={() => downloadSingle(item)}
+                        className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black transition-all"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    ) : item.status === "queued" ? (
+                      <button 
+                        onClick={() => setQueue(q => q.filter(i => i.id !== item.id))}
+                        className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                    )}
                   </div>
                 </div>
-
-                <div className="text-right hidden sm:block">
-                  <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Savings</div>
-                  <div className={`text-2xl font-black ${item.reductionRate !== undefined ? "text-green-500" : "text-slate-800"}`}>
-                    {item.reductionRate !== undefined ? `-${item.reductionRate.toFixed(1)}%` : "00.0%"}
-                  </div>
-                </div>
-
-                <div className="w-px h-10 bg-white/5 mx-2 hidden sm:block"></div>
-
-                <div>
-                  {item.status === "done" ? (
-                    <button onClick={() => downloadSingle(item)} className="p-4 bg-white/5 hover:bg-white text-white hover:text-slate-950 rounded-2xl transition-all group/btn">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                    </button>
-                  ) : item.status === "queued" ? (
-                    <button onClick={() => setQueue(q => q.filter(i => i.id !== item.id))} className="p-4 text-slate-600 hover:text-red-500 transition-colors">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  ) : (
-                    <div className="w-10 h-10 border-4 border-white/5 border-t-blue-500 rounded-full animate-spin"></div>
-                  )}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -234,16 +274,19 @@ export default function ImageOptimizer({ category, forcedFormat }: { category: I
 }
 
 function StatusBadge({ status }: { status: QueueStatus }) {
-  const styles = {
-    queued: "text-slate-600",
-    uploading: "text-blue-500 animate-pulse",
-    compressing: "text-amber-500 animate-pulse",
-    done: "text-green-500",
-    error: "text-red-500",
+  const labels = {
+    queued: "Queued",
+    uploading: "Uploading",
+    compressing: "Processing",
+    done: "Optimized",
+    error: "Failed",
   };
   return (
-    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${styles[status]}`}>
-      {status}
+    <span className={cn(
+      "text-[8px] font-black uppercase tracking-[0.15em]",
+      status === 'done' ? 'text-green-500' : status === 'error' ? 'text-red-500' : status === 'compressing' ? 'text-blue-500 animate-pulse' : 'text-slate-700'
+    )}>
+      {labels[status]}
     </span>
   );
 }
