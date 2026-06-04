@@ -15,7 +15,8 @@ export async function compressImage(
   originalSize: number;
   optimizedSize: number;
 }> {
-  const sourceBlob = await upload(`uploads/${id}-${file.name}`, file, {
+  const normalizedName = file.name.normalize("NFC");
+  const sourceBlob = await upload(`uploads/${id}-${normalizedName}`, file, {
     access: "public",
     contentType: file.type,
     handleUploadUrl: "/api/upload",
@@ -24,7 +25,7 @@ export async function compressImage(
 
   const payload: CompressionRequest = {
     sourceUrl: sourceBlob.url,
-    filename: file.name,
+    filename: normalizedName,
     mimeType: file.type,
     category,
     targetFormat,

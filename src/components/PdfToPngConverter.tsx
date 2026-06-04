@@ -18,7 +18,12 @@ function formatSize(bytes: number) {
 }
 
 function sanitizeFilename(name: string) {
-  return name.replace(/[^\w.-]+/g, "-");
+  const normalized = name.normalize("NFC");
+  let safe = normalized.replace(/[^\p{L}\p{N}._-]/gu, "-");
+  if (!safe.replace(/-+/g, "").trim()) {
+    safe = "converted";
+  }
+  return safe;
 }
 
 async function loadPdfjs() {
