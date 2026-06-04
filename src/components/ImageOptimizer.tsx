@@ -340,13 +340,22 @@ export default function ImageOptimizer({
               </span>
             </div>
             {isAllDone && (
-              <button
-                onClick={() => downloadAllAsZip(queue)}
-                className="flex items-center gap-3 text-xs font-black bg-blue-600 text-white px-8 py-4 rounded-full hover:bg-blue-500 transition-all shadow-[0_0_30px_rgba(59,130,246,0.4)] hover:scale-105 active:scale-95"
-              >
-                <Download className="w-4 h-4" />
-                EXPORT ALL AS BUNDLE (.ZIP)
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => downloadAllAsZip(queue)}
+                  className="flex items-center gap-3 text-xs font-black bg-blue-600 text-white px-8 py-4 rounded-full hover:bg-blue-500 transition-all shadow-[0_0_30px_rgba(59,130,246,0.4)] hover:scale-105 active:scale-95"
+                >
+                  <Download className="w-4 h-4" />
+                  EXPORT ALL AS BUNDLE (.ZIP)
+                </button>
+                <button
+                  onClick={() => setQueue([])}
+                  className="flex items-center gap-3 text-xs font-black bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-full transition-all hover:scale-105 active:scale-95 border border-white/10"
+                >
+                  <X className="w-4 h-4" />
+                  CLEAR
+                </button>
+              </div>
             )}
           </div>
 

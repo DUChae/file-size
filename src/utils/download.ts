@@ -4,7 +4,7 @@ import { QueueItem } from "@/types/image";
 
 export function downloadSingle(item: QueueItem) {
   if (item.optimizedDownloadUrl && item.optimizedFilename) {
-    saveAs(item.optimizedDownloadUrl, item.optimizedFilename);
+    saveAs(item.optimizedDownloadUrl, item.optimizedFilename.normalize("NFC"));
   }
 }
 
@@ -20,7 +20,7 @@ export async function downloadAllAsZip(items: QueueItem[]) {
       }
 
       const blob = await response.blob();
-      zip.file(item.optimizedFilename, blob);
+      zip.file(item.optimizedFilename.normalize("NFC"), blob);
     }
   }
 
