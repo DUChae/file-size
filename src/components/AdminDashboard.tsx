@@ -506,12 +506,12 @@ export default function AdminDashboard({
                 </ResponsiveContainer>
               </ChartCard>
 
-              <ChartCard title="Tool Distribution" subtitle="도구별 처리 비중" icon={ImageIcon} empty={chartData.length === 0}>
+              <ChartCard title="Tool Distribution" subtitle="도구별 처리 현황" icon={ImageIcon} empty={chartData.length === 0}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} stackOffset="expand">
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid stroke="rgba(255,255,255,0.03)" vertical={false} />
                     <XAxis dataKey="date" stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} dy={10} />
-                    <YAxis hide />
+                    <YAxis stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} allowDecimals={false} />
                     <Tooltip content={<DashboardTooltip />} />
                     <Bar dataKey="imageSuccess" name="Image" fill="#3b82f6" stackId="a" barSize={20} radius={[0, 0, 0, 0]} />
                     <Bar dataKey="pdfSuccess" name="PDF" fill="#f43f5e" stackId="a" barSize={20} radius={[4, 4, 0, 0]} />
