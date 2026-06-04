@@ -11,6 +11,7 @@ export function downloadSingle(item: QueueItem) {
 export async function downloadAllAsZip(items: QueueItem[]) {
   const zip = new JSZip();
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const usedFilenames = new Set<string>();
 
   for (const item of items) {
     if (item.optimizedUrl && item.optimizedFilename && item.status === "done") {
@@ -20,7 +21,21 @@ export async function downloadAllAsZip(items: QueueItem[]) {
       }
 
       const blob = await response.blob();
-      zip.file(item.optimizedFilename.normalize("NFC"), blob);
+      const baseFilename = item.optimizedFilename.normalize("NFC");
+      let uniqueFilename = baseFilename;
+
+      const dotIndex = baseFilename.lastIndexOf(".");
+      const namePart = dotIndex >= 0 ? baseFilename.substring(0, dotIndex) : baseFilename;
+      const extPart = dotIndex >= 0 ? baseFilename.substring(dotIndex) : "";
+
+      let counter = 1;
+      while (usedFilenames.has(uniqueFilename)) {
+        uniqueFilename = `${namePart} (${counter})${extPart}`;
+        counter++;
+      }
+
+      usedFilenames.add(uniqueFilename);
+      zip.file(uniqueFilename, blob);
     }
   }
 
