@@ -149,9 +149,26 @@ export async function POST(req: NextRequest) {
         })
         .toBuffer();
     } else if (outputMime === "image/gif") {
+      let gifColours = 256;
+      switch (category) {
+        case "screenshot":
+          gifColours = 128;
+          break;
+        case "web":
+          gifColours = 128;
+          break;
+        case "photo":
+          gifColours = 192;
+          break;
+        case "high-quality":
+          gifColours = 256;
+          break;
+      }
+
       outputBuffer = await sharpInstance
         .gif({
           effort: category === "high-quality" ? 9 : 7,
+          colours: gifColours,
         })
         .toBuffer();
     } else {
