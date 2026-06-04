@@ -41,7 +41,11 @@ export async function POST(req: NextRequest) {
     const inputBuffer = Buffer.from(sourceArrayBuffer);
     const originalSize = inputBuffer.length;
 
-    let sharpInstance = sharp(inputBuffer).rotate();
+    const isGif = mimeType === "image/gif" || filename.toLowerCase().endsWith(".gif");
+    let sharpInstance = sharp(inputBuffer, isGif ? { animated: true } : undefined);
+    if (!isGif) {
+      sharpInstance = sharpInstance.rotate();
+    }
     const metadata = await sharpInstance.metadata();
 
     if (!metadata.width || !metadata.height) {
@@ -63,6 +67,9 @@ export async function POST(req: NextRequest) {
     } else if (targetFormat === "avif") {
       outputMime = "image/avif";
       outputExt = "avif";
+    } else if (targetFormat === "gif") {
+      outputMime = "image/gif";
+      outputExt = "gif";
     }
 
     let quality = 82;
@@ -101,7 +108,7 @@ export async function POST(req: NextRequest) {
       const targetWidth = parseWebSizeDimension(webWidth, "Width");
       const targetHeight = parseWebSizeDimension(webHeight, "Height");
       if (targetWidth && targetHeight) {
-        const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif")
+        const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif" || outputMime === "image/gif")
           ? { r: 255, g: 255, b: 255, alpha: 0 }
           : { r: 255, g: 255, b: 255, alpha: 1 };
 
@@ -141,6 +148,12 @@ export async function POST(req: NextRequest) {
           lossless: category === "high-quality",
         })
         .toBuffer();
+    } else if (outputMime === "image/gif") {
+      outputBuffer = await sharpInstance
+        .gif({
+          effort: category === "high-quality" ? 9 : 7,
+        })
+        .toBuffer();
     } else {
       outputBuffer = await sharpInstance
         .jpeg({
@@ -158,7 +171,7 @@ export async function POST(req: NextRequest) {
     if (!safeBaseName.replace(/-+/g, "").trim()) {
       safeBaseName = "optimized";
     }
-    const outputFilename = `${safeBaseName}.optimized.${outputExt}`;
+    const outputFilename = `${safeBaseName}.${outputExt}`;
     const outputPathname = `optimized/${uploadId}/${outputFilename}`;
 
     const finalBuffer =

@@ -63,9 +63,9 @@ export default function ImageOptimizer({
       const newItems: QueueItem[] = fileArray
         .filter(
           (f) =>
-            ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
+            ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"].includes(
               f.type,
-            ) || f.name.toLowerCase().endsWith(".avif"),
+            ) || f.name.toLowerCase().endsWith(".avif") || f.name.toLowerCase().endsWith(".gif"),
         )
         .map((file) => ({
           id: Math.random().toString(36).substring(2, 9),
@@ -243,8 +243,8 @@ export default function ImageOptimizer({
             <h4 className="text-xs font-black text-white uppercase tracking-[0.4em] opacity-40">
               Export Format
             </h4>
-            <div className="grid grid-cols-5 gap-2 p-1.5 bg-white/[0.03] border border-white/10 rounded-2xl">
-              {(["original", "png", "jpeg", "webp", "avif"] as const).map(
+            <div className="grid grid-cols-6 gap-2 p-1.5 bg-white/[0.03] border border-white/10 rounded-2xl">
+              {(["original", "png", "jpeg", "webp", "avif", "gif"] as const).map(
                 (fmt) => (
                   <button
                     key={fmt}
@@ -279,6 +279,8 @@ export default function ImageOptimizer({
                 "차세대 예측 인코딩 기술을 활용하여 JPEG 대비 시각적 품질 저하 없이 현격한 용량 감소를 제공합니다."}
               {globalFormat === "avif" &&
                 "최신 AV1 비디오 코덱 기반 기술로 현존하는 이미지 포맷 중 가장 압축 효율이 뛰어나며 광범위한 색역을 지원합니다."}
+              {globalFormat === "gif" &&
+                "프레임 간 차분 압축 알고리즘을 사용하며, 애니메이션 정보 유실 없이 파일 크기를 최적화합니다."}
             </p>
           </div>
         </div>
