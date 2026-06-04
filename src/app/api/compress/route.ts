@@ -184,8 +184,8 @@ export async function POST(req: NextRequest) {
     const dotIndex = filename.lastIndexOf(".");
     const nameOnly = dotIndex >= 0 ? filename.substring(0, dotIndex) : filename;
     const normalizedName = nameOnly.normalize("NFC");
-    let safeBaseName = normalizedName.replace(/[^\p{L}\p{N}._-]/gu, "-");
-    if (!safeBaseName.replace(/-+/g, "").trim()) {
+    let safeBaseName = normalizedName.replace(/[<>:"/\\|?*\x00-\x1f]/g, "-");
+    if (!safeBaseName.trim()) {
       safeBaseName = "optimized";
     }
     const outputFilename = `${safeBaseName}.${outputExt}`;
