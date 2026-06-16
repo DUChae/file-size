@@ -4,13 +4,13 @@ import sharp from "sharp";
 import { CompressionRequest, CompressionResponse } from "@/types/image";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 
-function parseWebSizeDimension(value: number | undefined, label: string) {
+function parseWebSizeDimension(value: number | undefined, label: string, allowZero = false) {
   if (value === undefined) {
     return null;
   }
 
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${label} must be greater than 0.`);
+  if (!Number.isFinite(value) || (allowZero ? value < 0 : value <= 0)) {
+    throw new Error(`${label} must be ${allowZero ? '0 or greater' : 'greater than 0'}.`);
   }
 
   return Math.round(value);
@@ -108,17 +108,22 @@ export async function POST(req: NextRequest) {
 
     const targetWidth = parseWebSizeDimension(webWidth, "Width");
     const targetHeight = parseWebSizeDimension(webHeight, "Height");
-    const targetX = parseWebSizeDimension(webX ?? 0, "X position") ?? 0;
-    const targetY = parseWebSizeDimension(webY ?? 0, "Y position") ?? 0;
+    const targetX = parseWebSizeDimension(webX ?? 0, "X position", true) ?? 0;
+    const targetY = parseWebSizeDimension(webY ?? 0, "Y position", true) ?? 0;
 
     if (targetWidth && targetHeight) {
       if (category === "screenshot") {
         // For screenshots (URL capture), we CROP from the specified (X, Y) based on user's drag area
+        const cropLeft = Math.max(0, Math.min(targetX, metadata.width - 1));
+        const cropTop = Math.max(0, Math.min(targetY, metadata.height - 1));
+        const cropWidth = Math.max(1, Math.min(targetWidth, metadata.width - cropLeft));
+        const cropHeight = Math.max(1, Math.min(targetHeight, metadata.height - cropTop));
+
         sharpInstance = sharpInstance.extract({
-          left: Math.max(0, Math.min(targetX, metadata.width - 1)),
-          top: Math.max(0, Math.min(targetY, metadata.height - 1)),
-          width: Math.min(targetWidth, metadata.width - targetX),
-          height: Math.min(targetHeight, metadata.height - targetY),
+          left: cropLeft,
+          top: cropTop,
+          width: cropWidth,
+          height: cropHeight,
         });
       } else {
         // For other categories, we RESIZE (contain) to the target dimensions
