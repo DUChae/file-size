@@ -495,7 +495,7 @@ export default function UrlCaptureOptimizer() {
               </div>
             </div>
 
-            {activeItem.status === "captured" || activeItem.status === "done" ? (
+            {(activeItem.status === "captured" || activeItem.status === "done" || activeItem.status === "compressing") ? (
               <div className="space-y-6 pt-6 border-t border-white/5">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -515,7 +515,7 @@ export default function UrlCaptureOptimizer() {
                   disabled={activeItem.status === "compressing"}
                 >
                   {activeItem.status === "compressing" ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-                  Compress Selection
+                  {activeItem.status === "done" ? "Re-compress" : "Compress Selection"}
                 </Button>
               </div>
             ) : null}
