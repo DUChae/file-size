@@ -137,8 +137,7 @@ export async function POST(request: NextRequest) {
   try {
     const accessKey = process.env.SCREENSHOTONE_ACCESS_KEY;
     if (!accessKey) {
-      const availableKeys = Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('KEY') && !k.includes('TOKEN')).join(', ');
-      throw new Error(`Screenshot capture is not configured. (Current keys: ${availableKeys ? 'found some' : 'none found'})`);
+      throw new Error("Screenshot capture is not configured.");
     }
 
     const body = (await request.json()) as { url?: string };
@@ -163,7 +162,9 @@ export async function POST(request: NextRequest) {
     screenshotUrl.searchParams.set("viewport_height", "900");
     screenshotUrl.searchParams.set("block_ads", "true");
     screenshotUrl.searchParams.set("block_cookie_banners", "true");
-    screenshotUrl.searchParams.set("timeout", "30");
+    screenshotUrl.searchParams.set("delay", "2");
+    screenshotUrl.searchParams.set("scroll_to_bottom", "true");
+    screenshotUrl.searchParams.set("timeout", "45");
 
     const screenshotResponse = await fetch(screenshotUrl, {
       headers: { Accept: "image/png" },
