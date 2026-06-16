@@ -31,6 +31,7 @@ type CaptureStatus = "idle" | "capturing" | "captured" | "compressing" | "done" 
 interface CaptureItem {
   id: string;
   url: string;
+  displayUrl: string;
   status: CaptureStatus;
   error?: string;
   captureData?: UrlCaptureResponse;
@@ -63,6 +64,27 @@ function formatSize(bytes: number) {
   return `${(bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
+function createCaptureItem(rawUrl: string): CaptureItem | null {
+  const normalized = rawUrl.trim().replace(/[)\].,;]+$/g, "");
+  const withoutProtocol = normalized.replace(/^https?:\/\//i, "");
+  const domain = withoutProtocol.split(/[/?#]/)[0]?.replace(/\.$/, "");
+
+  if (!domain || !domain.includes(".")) {
+    return null;
+  }
+
+  return {
+    id: Math.random().toString(36).substring(2, 9),
+    url: `http://${domain}`,
+    displayUrl: domain.replace(/^www\./i, ""),
+    status: "idle",
+    targetWidth: 0,
+    targetHeight: 0,
+    targetX: 0,
+    targetY: 0,
+  };
+}
+
 export default function UrlCaptureOptimizer() {
   const [urls, setUrls] = useState<CaptureItem[]>([]);
   const [inputUrl, setInputUrl] = useState("");
@@ -77,21 +99,12 @@ export default function UrlCaptureOptimizer() {
     if (!inputUrl.trim()) return;
     
     // Robust regex to find URLs in any text
-    const urlRegex = /(https?:\/\/[^\s,]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-z]{2,}(?:\/[^\s,.]*)?)/gi;
+    const urlRegex = /(https?:\/\/[^\s,]+|(?:[a-zA-Z0-9가-힣][a-zA-Z0-9가-힣-]*\.)+[a-zA-Z가-힣]{2,}(?:\/[^\s,]*)?)/gi;
     const matches = inputUrl.match(urlRegex) || [];
     
     const newUrls = matches
-      .map(u => u.trim())
-      .map(u => u.startsWith("http") ? u : `https://${u}`)
-      .map(u => ({
-        id: Math.random().toString(36).substring(2, 9),
-        url: u,
-        status: "idle" as const,
-        targetWidth: 0,
-        targetHeight: 0,
-        targetX: 0,
-        targetY: 0,
-      }));
+      .map(createCaptureItem)
+      .filter((item): item is CaptureItem => Boolean(item));
 
     if (newUrls.length > 0) {
       setUrls(prev => [...prev, ...newUrls]);
@@ -178,7 +191,7 @@ export default function UrlCaptureOptimizer() {
         throw new Error(data.error || "Compression failed.");
       }
 
-      const displayFilename = new URL(item.url).hostname.replace(/^www\./, "") + `.${globalFormat}`;
+      const displayFilename = item.displayUrl + `.${globalFormat}`;
 
       updateItem(item.id, {
         status: "done",
@@ -381,7 +394,7 @@ export default function UrlCaptureOptimizer() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-black text-white truncate">{item.url}</div>
+                  <div className="text-[11px] font-black text-white truncate">{item.displayUrl}</div>
                   <div className={cn(
                     "text-[9px] font-black uppercase tracking-widest mt-1",
                     item.status === "error" ? "text-red-500" : "text-slate-500"
@@ -423,7 +436,7 @@ export default function UrlCaptureOptimizer() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-2xl font-black text-white tracking-tight">Workspace</h3>
-                <p className="text-xs text-slate-500 font-black uppercase tracking-widest mt-1">{activeItem.url}</p>
+                <p className="text-xs text-slate-500 font-black uppercase tracking-widest mt-1">{activeItem.displayUrl}</p>
               </div>
               <div className="flex gap-3">
                 {(activeItem.status === "idle" || activeItem.status === "error") && (
