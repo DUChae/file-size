@@ -144,6 +144,24 @@ export async function POST(request: NextRequest) {
     const targetUrl = await validateCaptureUrl((body.url || "").trim());
     checkRateLimit(getClientIp(request));
 
+    // Smart detection for iframe-only wrappers (common in Korean web agencies like i-web.kr)
+    let captureUrlString = targetUrl.href;
+    try {
+      const probeResponse = await fetch(targetUrl.href, { next: { revalidate: 0 } });
+      const html = await probeResponse.text();
+      // If it's a small wrapper page with an iframe, target the iframe source instead
+      if (html.length < 10000 && html.includes("<iframe")) {
+        const iframeMatch = html.match(/id="contentFrame"\s+src="([^"]+)"/) || 
+                           html.match(/<iframe[^>]+src="([^"]+)"/);
+        if (iframeMatch && iframeMatch[1]) {
+          const innerUrl = new URL(iframeMatch[1], targetUrl.href);
+          captureUrlString = innerUrl.href;
+        }
+      }
+    } catch (e) {
+      console.warn("Iframe probe failed, using original URL:", e);
+    }
+
     await trackAnalyticsEvent({
       type: "image_job_started",
       status: "started",
@@ -154,45 +172,18 @@ export async function POST(request: NextRequest) {
 
     const screenshotUrl = new URL("https://api.screenshotone.com/take");
     screenshotUrl.searchParams.set("access_key", accessKey);
-    screenshotUrl.searchParams.set("url", targetUrl.href);
+    screenshotUrl.searchParams.set("url", captureUrlString);
     screenshotUrl.searchParams.set("format", "png");
     screenshotUrl.searchParams.set("response_type", "by_format");
     screenshotUrl.searchParams.set("full_page", "true");
     screenshotUrl.searchParams.set("full_page_scroll", "true");
-    screenshotUrl.searchParams.set("full_page_scroll_delay", "1500");
     screenshotUrl.searchParams.set("viewport_width", "1440");
     screenshotUrl.searchParams.set("viewport_height", "900");
     screenshotUrl.searchParams.set("block_ads", "true");
     screenshotUrl.searchParams.set("block_cookie_banners", "true");
-    screenshotUrl.searchParams.set("delay", "7");
+    screenshotUrl.searchParams.set("delay", "5");
     screenshotUrl.searchParams.set("wait_until", "networkidle2");
-    screenshotUrl.searchParams.set("styles", "html, body { height: auto !important; overflow: visible !important; } #contentFrame { width: 100% !important; border: none !important; height: auto !important; }");
-    screenshotUrl.searchParams.set("scripts", `
-      (function() {
-        const iframe = document.getElementById('contentFrame');
-        if (iframe) {
-          try {
-            const doc = iframe.contentWindow.document;
-            if (doc) {
-              const style = doc.createElement('style');
-              style.textContent = 'html, body { height: auto !important; overflow: visible !important; } .section { height: auto !important; min-height: 100vh !important; }';
-              doc.head.appendChild(style);
-              
-              const height = Math.max(
-                doc.body.scrollHeight, doc.documentElement.scrollHeight,
-                doc.body.offsetHeight, doc.documentElement.offsetHeight
-              );
-              iframe.style.setProperty('height', height + 'px', 'important');
-              iframe.setAttribute('scrolling', 'no');
-            }
-          } catch (e) {
-            iframe.style.setProperty('height', '12000px', 'important');
-          }
-          document.documentElement.style.height = 'auto';
-          document.body.style.height = 'auto';
-        }
-      })();
-    `);
+    screenshotUrl.searchParams.set("styles", "html, body { height: auto !important; overflow: visible !important; }");
     screenshotUrl.searchParams.set("timeout", "60");
 
     const screenshotResponse = await fetch(screenshotUrl, {
