@@ -158,6 +158,7 @@ export async function POST(request: NextRequest) {
     screenshotUrl.searchParams.set("format", "png");
     screenshotUrl.searchParams.set("response_type", "by_format");
     screenshotUrl.searchParams.set("full_page", "true");
+    screenshotUrl.searchParams.set("full_page_scroll", "true");
     screenshotUrl.searchParams.set("viewport_width", "1440");
     screenshotUrl.searchParams.set("viewport_height", "900");
     screenshotUrl.searchParams.set("block_ads", "true");
