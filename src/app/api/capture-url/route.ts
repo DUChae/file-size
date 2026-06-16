@@ -147,7 +147,13 @@ function createScreenshotUrl(accessKey: string, captureUrlString: string) {
   screenshotUrl.searchParams.set("block_cookie_banners", "true");
   screenshotUrl.searchParams.set("delay", "5");
   screenshotUrl.searchParams.set("wait_until", "networkidle2");
-  screenshotUrl.searchParams.set("styles", "html, body { height: auto !important; overflow: visible !important; }");
+  screenshotUrl.searchParams.set(
+    "styles",
+    [
+      "html, body { height: auto !important; overflow: visible !important; }",
+      "*, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }",
+    ].join(" "),
+  );
   screenshotUrl.searchParams.set("timeout", "60");
 
   return screenshotUrl;
