@@ -321,15 +321,15 @@ export default function UrlCaptureOptimizer() {
                 disabled={urls.every(u => u.status !== "idle" && u.status !== "error")}
                 className="rounded-full border-white/10 text-xs font-black"
               >
-                Batch Capture ({urls.filter(u => u.status === "idle").length})
+                일괄 캡처 ({urls.filter(u => u.status === "idle" || u.status === "error").length})
               </Button>
               <Button 
                 variant="blue" 
                 onClick={handleBatchCompress}
-                disabled={!urls.some(u => u.status === "captured")}
+                disabled={!urls.some(u => u.status === "captured" || u.status === "done")}
                 className="rounded-full text-xs font-black px-8"
               >
-                Batch Compress
+                일괄 압축
               </Button>
             </div>
           )}
@@ -341,7 +341,7 @@ export default function UrlCaptureOptimizer() {
             <textarea
               value={inputUrl}
               onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="Enter URL(s) separated by newline or comma"
+              placeholder="URL을 입력하세요 (엔터나 콤마로 여러 개 입력 가능)"
               className="w-full bg-transparent py-5 text-sm font-bold text-white outline-none placeholder:text-slate-700 resize-none h-16"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -352,7 +352,7 @@ export default function UrlCaptureOptimizer() {
             />
           </div>
           <Button type="submit" variant="blue" size="xl" className="rounded-2xl px-10">
-            Add to Queue
+            큐에 추가
           </Button>
         </form>
 
@@ -384,15 +384,30 @@ export default function UrlCaptureOptimizer() {
                     "text-[9px] font-black uppercase tracking-widest mt-1",
                     item.status === "error" ? "text-red-500" : "text-slate-500"
                   )}>
-                    {item.error || item.status}
+                    {item.error || (item.status === "done" ? "최적화 완료" : item.status)}
                   </div>
                 </div>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); removeUrl(item.id); }}
-                  className="opacity-0 group-hover:opacity-100 p-2 hover:text-red-500 transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  {item.result && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveAs(item.result!.downloadUrl, item.result!.filename);
+                      }}
+                      className="p-2 text-blue-400 hover:text-blue-300 transition-all"
+                      title="개별 다운로드"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); removeUrl(item.id); }}
+                    className="p-2 text-slate-600 hover:text-red-500 transition-all"
+                    title="제거"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
