@@ -163,9 +163,16 @@ export async function POST(request: NextRequest) {
     screenshotUrl.searchParams.set("viewport_height", "900");
     screenshotUrl.searchParams.set("block_ads", "true");
     screenshotUrl.searchParams.set("block_cookie_banners", "true");
-    screenshotUrl.searchParams.set("delay", "3");
-    screenshotUrl.searchParams.set("scripts_wait_until", "networkidle0");
-    screenshotUrl.searchParams.set("timeout", "45");
+    screenshotUrl.searchParams.set("delay", "5");
+    screenshotUrl.searchParams.set("scripts_wait_until", "networkidle2");
+    screenshotUrl.searchParams.set("script", `
+      document.documentElement.style.overflow = 'visible';
+      document.body.style.overflow = 'visible';
+      document.documentElement.style.height = 'auto';
+      document.body.style.height = 'auto';
+      window.scrollTo(0, 0);
+    `);
+    screenshotUrl.searchParams.set("timeout", "60");
 
     const screenshotResponse = await fetch(screenshotUrl, {
       headers: { Accept: "image/png" },
