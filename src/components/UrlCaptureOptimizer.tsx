@@ -178,10 +178,12 @@ export default function UrlCaptureOptimizer() {
         throw new Error(data.error || "Compression failed.");
       }
 
+      const displayFilename = new URL(item.url).hostname.replace(/^www\./, "") + `.${globalFormat}`;
+
       updateItem(item.id, {
         status: "done",
         result: {
-          filename: data.outputFilename,
+          filename: displayFilename,
           url: data.outputUrl,
           downloadUrl: data.outputDownloadUrl,
           originalSize: data.originalSize,
@@ -218,7 +220,7 @@ export default function UrlCaptureOptimizer() {
     }
 
     const content = await zip.generateAsync({ type: "blob" });
-    saveAs(content, `url-captures-${new Date().getTime()}.zip`);
+    saveAs(content, "url-capture.zip");
   };
 
   const handleMoveStart = useCallback(
