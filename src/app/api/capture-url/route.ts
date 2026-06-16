@@ -162,8 +162,8 @@ export async function POST(request: NextRequest) {
     screenshotUrl.searchParams.set("viewport_height", "900");
     screenshotUrl.searchParams.set("block_ads", "true");
     screenshotUrl.searchParams.set("block_cookie_banners", "true");
-    screenshotUrl.searchParams.set("delay", "2");
-    screenshotUrl.searchParams.set("scroll_to_bottom", "true");
+    screenshotUrl.searchParams.set("delay", "3");
+    screenshotUrl.searchParams.set("scripts_wait_until", "networkidle0");
     screenshotUrl.searchParams.set("timeout", "45");
 
     const screenshotResponse = await fetch(screenshotUrl, {
