@@ -166,23 +166,30 @@ export async function POST(request: NextRequest) {
     screenshotUrl.searchParams.set("block_cookie_banners", "true");
     screenshotUrl.searchParams.set("delay", "7");
     screenshotUrl.searchParams.set("wait_until", "networkidle2");
-    screenshotUrl.searchParams.set("styles", "html, body, #wrap, #container { height: auto !important; overflow: visible !important; position: relative !important; } .section, section, div[class*='section'] { height: auto !important; min-height: 100vh !important; position: relative !important; } #contentFrame { height: 20000px !important; }");
+    screenshotUrl.searchParams.set("styles", "html, body { height: auto !important; overflow: visible !important; } #contentFrame { width: 100% !important; border: none !important; height: auto !important; }");
     screenshotUrl.searchParams.set("scripts", `
       (function() {
         const iframe = document.getElementById('contentFrame');
         if (iframe) {
           try {
-            // Attempt to auto-size if same-origin
-            const height = iframe.contentWindow.document.body.scrollHeight;
-            if (height > 0) iframe.style.height = height + 'px';
+            const doc = iframe.contentWindow.document;
+            if (doc) {
+              const style = doc.createElement('style');
+              style.textContent = 'html, body { height: auto !important; overflow: visible !important; } .section { height: auto !important; min-height: 100vh !important; }';
+              doc.head.appendChild(style);
+              
+              const height = Math.max(
+                doc.body.scrollHeight, doc.documentElement.scrollHeight,
+                doc.body.offsetHeight, doc.documentElement.offsetHeight
+              );
+              iframe.style.setProperty('height', height + 'px', 'important');
+              iframe.setAttribute('scrolling', 'no');
+            }
           } catch (e) {
-            // Fallback for cross-origin or if above fails
-            iframe.style.setProperty('height', '15000px', 'important');
+            iframe.style.setProperty('height', '12000px', 'important');
           }
-          iframe.style.setProperty('position', 'relative', 'important');
-          document.body.style.setProperty('height', 'auto', 'important');
-          document.documentElement.style.setProperty('height', 'auto', 'important');
-          document.body.style.setProperty('overflow', 'visible', 'important');
+          document.documentElement.style.height = 'auto';
+          document.body.style.height = 'auto';
         }
       })();
     `);
