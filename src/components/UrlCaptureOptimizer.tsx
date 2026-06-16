@@ -91,7 +91,7 @@ async function parseResponseJson<T>(response: Response): Promise<T> {
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(text || "Invalid server response.");
+    throw new Error("페이지 캡처에 실패했습니다. 사이트가 캡처 요청을 차단했거나 HTTP/HTTPS 접속을 지원하지 않을 수 있습니다. 잠시 후 다시 시도해 주세요.");
   }
 }
 

@@ -180,9 +180,8 @@ async function fetchScreenshotWithProtocolFallback(accessKey: string, captureUrl
     try {
       return await fetchScreenshot(accessKey, parsedUrl.href);
     } catch (httpsError) {
-      const httpMessage = httpError instanceof Error ? httpError.message : "HTTP capture failed.";
-      const httpsMessage = httpsError instanceof Error ? httpsError.message : "HTTPS capture failed.";
-      throw new Error(`Failed to capture over HTTP or HTTPS. HTTP: ${httpMessage} HTTPS: ${httpsMessage}`);
+      console.warn("URL capture failed over HTTP and HTTPS:", { httpError, httpsError });
+      throw new Error("페이지 캡처에 실패했습니다. 사이트가 캡처 요청을 차단했거나 HTTP/HTTPS 접속을 지원하지 않을 수 있습니다. 잠시 후 다시 시도해 주세요.");
     }
   }
 }
