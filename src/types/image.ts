@@ -29,6 +29,8 @@ export interface CompressionRequest {
   targetFormat: OutputFormat;
   webWidth?: number;
   webHeight?: number;
+  webX?: number;
+  webY?: number;
   uploadId: string;
   preserveSource?: boolean;
 }

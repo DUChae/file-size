@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload: CompressionRequest = await req.json();
-    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webWidth, webHeight, uploadId, preserveSource } = payload;
+    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webWidth, webHeight, webX, webY, uploadId, preserveSource } = payload;
     sourceUrl = requestSourceUrl;
     shouldPreserveSource = !!preserveSource;
 
@@ -108,17 +108,31 @@ export async function POST(req: NextRequest) {
 
     const targetWidth = parseWebSizeDimension(webWidth, "Width");
     const targetHeight = parseWebSizeDimension(webHeight, "Height");
-    if (targetWidth && targetHeight) {
-      const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif" || outputMime === "image/gif")
-        ? { r: 255, g: 255, b: 255, alpha: 0 }
-        : { r: 255, g: 255, b: 255, alpha: 1 };
+    const targetX = parseWebSizeDimension(webX ?? 0, "X position") ?? 0;
+    const targetY = parseWebSizeDimension(webY ?? 0, "Y position") ?? 0;
 
-      sharpInstance = sharpInstance.resize(targetWidth, targetHeight, {
-        fit: category === "screenshot" ? "fill" : "contain",
-        position: "centre",
-        background,
-        withoutEnlargement: true,
-      });
+    if (targetWidth && targetHeight) {
+      if (category === "screenshot") {
+        // For screenshots (URL capture), we CROP from the specified (X, Y) based on user's drag area
+        sharpInstance = sharpInstance.extract({
+          left: Math.max(0, Math.min(targetX, metadata.width - 1)),
+          top: Math.max(0, Math.min(targetY, metadata.height - 1)),
+          width: Math.min(targetWidth, metadata.width - targetX),
+          height: Math.min(targetHeight, metadata.height - targetY),
+        });
+      } else {
+        // For other categories, we RESIZE (contain) to the target dimensions
+        const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif" || outputMime === "image/gif")
+          ? { r: 255, g: 255, b: 255, alpha: 0 }
+          : { r: 255, g: 255, b: 255, alpha: 1 };
+
+        sharpInstance = sharpInstance.resize(targetWidth, targetHeight, {
+          fit: "contain",
+          position: "centre",
+          background,
+          withoutEnlargement: true,
+        });
+      }
     }
 
     let outputBuffer: Buffer;

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import { saveAs } from "file-saver";
+import JSZip from "jszip";
 import {
   ArrowRight,
   CheckCircle2,
@@ -12,6 +13,9 @@ import {
   Loader2,
   Maximize2,
   X,
+  Plus,
+  Trash2,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -22,7 +26,20 @@ import {
   UrlCaptureResponse,
 } from "@/types/image";
 
-type CaptureState = "idle" | "capturing" | "captured" | "compressing" | "done" | "error";
+type CaptureStatus = "idle" | "capturing" | "captured" | "compressing" | "done" | "error";
+
+interface CaptureItem {
+  id: string;
+  url: string;
+  status: CaptureStatus;
+  error?: string;
+  captureData?: UrlCaptureResponse;
+  result?: OptimizedResult;
+  targetWidth: number;
+  targetHeight: number;
+  targetX: number;
+  targetY: number;
+}
 
 interface OptimizedResult {
   filename: string;
@@ -47,35 +64,59 @@ function formatSize(bytes: number) {
 }
 
 export default function UrlCaptureOptimizer() {
-  const [url, setUrl] = useState("");
-  const [status, setStatus] = useState<CaptureState>("idle");
-  const [error, setError] = useState("");
-  const [capture, setCapture] = useState<UrlCaptureResponse | null>(null);
-  const [targetFormat, setTargetFormat] = useState<OutputFormat>("png");
-  const [targetWidth, setTargetWidth] = useState(0);
-  const [targetHeight, setTargetHeight] = useState(0);
-  const [result, setResult] = useState<OptimizedResult | null>(null);
+  const [urls, setUrls] = useState<CaptureItem[]>([]);
+  const [inputUrl, setInputUrl] = useState("");
+  const [globalFormat, setGlobalFormat] = useState<OutputFormat>("png");
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
-  const resetResult = useCallback(() => {
-    setResult(null);
-    if (status === "done") {
-      setStatus("captured");
-    }
-  }, [status]);
+  const activeItem = urls.find((item) => item.id === activeItemId);
 
-  const handleCapture = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setStatus("capturing");
-    setError("");
-    setCapture(null);
-    setResult(null);
+  const addUrl = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!inputUrl.trim()) return;
+    
+    // Robust regex to find URLs in any text
+    const urlRegex = /(https?:\/\/[^\s,]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-z]{2,}(?:\/[^\s,.]*)?)/gi;
+    const matches = inputUrl.match(urlRegex) || [];
+    
+    const newUrls = matches
+      .map(u => u.trim())
+      .map(u => u.startsWith("http") ? u : `https://${u}`)
+      .map(u => ({
+        id: Math.random().toString(36).substring(2, 9),
+        url: u,
+        status: "idle" as const,
+        targetWidth: 0,
+        targetHeight: 0,
+        targetX: 0,
+        targetY: 0,
+      }));
+
+    if (newUrls.length > 0) {
+      setUrls(prev => [...prev, ...newUrls]);
+      setInputUrl("");
+      if (!activeItemId) setActiveItemId(newUrls[0].id);
+    }
+  };
+
+  const removeUrl = (id: string) => {
+    setUrls(prev => prev.filter(item => item.id !== id));
+    if (activeItemId === id) setActiveItemId(null);
+  };
+
+  const updateItem = useCallback((id: string, updates: Partial<CaptureItem>) => {
+    setUrls(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+  }, []);
+
+  const handleCapture = async (item: CaptureItem) => {
+    updateItem(item.id, { status: "capturing", error: undefined, captureData: undefined, result: undefined });
 
     try {
       const response = await fetch("/api/capture-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: item.url }),
       });
       const data = (await response.json()) as UrlCaptureResponse;
 
@@ -83,66 +124,45 @@ export default function UrlCaptureOptimizer() {
         throw new Error(data.error || "Failed to capture the page.");
       }
 
-      setCapture(data);
-      setTargetWidth(data.width);
-      setTargetHeight(data.height);
-      setStatus("captured");
-    } catch (captureError) {
-      setError(captureError instanceof Error ? captureError.message : "Capture failed.");
-      setStatus("error");
+      updateItem(item.id, {
+        status: "captured",
+        captureData: data,
+        targetWidth: data.width || 1440,
+        targetHeight: data.height || 900,
+        targetX: 0,
+        targetY: 0,
+      });
+    } catch (err) {
+      updateItem(item.id, {
+        status: "error",
+        error: err instanceof Error ? err.message : "Capture failed.",
+      });
     }
   };
 
-  const handleResizeStart = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (!capture?.width || !capture.height || !previewRef.current) return;
+  const handleBatchCapture = async () => {
+    const idleItems = urls.filter(u => u.status === "idle" || u.status === "error");
+    for (const item of idleItems) {
+      await handleCapture(item);
+    }
+  };
 
-      event.preventDefault();
-      const captureWidth = capture.width;
-      const captureHeight = capture.height;
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const startWidth = targetWidth;
-      const startHeight = targetHeight;
-      const previewRect = previewRef.current.getBoundingClientRect();
-      const widthScale = captureWidth / previewRect.width;
-      const heightScale = captureHeight / previewRect.height;
+  const handleCompress = async (item: CaptureItem) => {
+    if (!item.captureData?.sourceUrl || !item.captureData.filename || !item.captureData.captureId) return;
 
-      const handleMove = (moveEvent: PointerEvent) => {
-        const nextWidth = Math.round(startWidth + (moveEvent.clientX - startX) * widthScale);
-        const nextHeight = Math.round(startHeight + (moveEvent.clientY - startY) * heightScale);
-        setTargetWidth(Math.max(320, Math.min(captureWidth, nextWidth)));
-        setTargetHeight(Math.max(240, Math.min(captureHeight, nextHeight)));
-        resetResult();
-      };
-
-      const handleUp = () => {
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleUp);
-      };
-
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleUp);
-    },
-    [capture, resetResult, targetHeight, targetWidth],
-  );
-
-  const handleCompress = async () => {
-    if (!capture?.sourceUrl || !capture.filename || !capture.mimeType || !capture.captureId) return;
-
-    setStatus("compressing");
-    setError("");
-    setResult(null);
+    updateItem(item.id, { status: "compressing", error: undefined, result: undefined });
 
     const payload: CompressionRequest = {
-      sourceUrl: capture.sourceUrl,
-      filename: capture.filename,
-      mimeType: capture.mimeType,
+      sourceUrl: item.captureData.sourceUrl,
+      filename: item.captureData.filename,
+      mimeType: item.captureData.mimeType || "image/png",
       category: "screenshot",
-      targetFormat,
-      webWidth: targetWidth,
-      webHeight: targetHeight,
-      uploadId: capture.captureId,
+      targetFormat: globalFormat,
+      webWidth: item.targetWidth,
+      webHeight: item.targetHeight,
+      webX: item.targetX,
+      webY: item.targetY,
+      uploadId: item.captureData.captureId,
       preserveSource: true,
     };
 
@@ -158,152 +178,313 @@ export default function UrlCaptureOptimizer() {
         throw new Error(data.error || "Compression failed.");
       }
 
-      setResult({
-        filename: data.outputFilename,
-        url: data.outputUrl,
-        downloadUrl: data.outputDownloadUrl,
-        originalSize: data.originalSize,
-        optimizedSize: data.optimizedSize,
+      updateItem(item.id, {
+        status: "done",
+        result: {
+          filename: data.outputFilename,
+          url: data.outputUrl,
+          downloadUrl: data.outputDownloadUrl,
+          originalSize: data.originalSize,
+          optimizedSize: data.optimizedSize,
+        }
       });
-      setStatus("done");
-    } catch (compressError) {
-      setError(compressError instanceof Error ? compressError.message : "Compression failed.");
-      setStatus("error");
+    } catch (err) {
+      updateItem(item.id, {
+        status: "error",
+        error: err instanceof Error ? err.message : "Compression failed.",
+      });
     }
   };
 
-  const reductionRate = result
-    ? ((result.originalSize - result.optimizedSize) / result.originalSize) * 100
-    : null;
-  const previewWidthPercent = capture?.width ? (targetWidth / capture.width) * 100 : 100;
-  const previewHeightPercent = capture?.height ? (targetHeight / capture.height) * 100 : 100;
+  const handleBatchCompress = async () => {
+    const capturedItems = urls.filter(u => u.status === "captured" || u.status === "done");
+    for (const item of capturedItems) {
+      // Use full dimensions if they haven't been customized, or just force them for batch
+      await handleCompress(item);
+    }
+  };
+
+  const downloadZip = async () => {
+    const completedResults = urls.filter(u => u.result).map(u => u.result!);
+    if (completedResults.length === 0) return;
+
+    const zip = new JSZip();
+    const folder = zip.folder("captured-images");
+
+    for (const res of completedResults) {
+      const imgResponse = await fetch(res.url);
+      const blob = await imgResponse.blob();
+      folder?.file(res.filename, blob);
+    }
+
+    const content = await zip.generateAsync({ type: "blob" });
+    saveAs(content, `url-captures-${new Date().getTime()}.zip`);
+  };
+
+  const handleMoveStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!activeItem?.captureData || !previewRef.current) return;
+      if ((event.target as HTMLElement).closest("button")) return;
+
+      event.preventDefault();
+      const { width: captureWidth, height: captureHeight } = activeItem.captureData;
+      const startClientX = event.clientX;
+      const startClientY = event.clientY;
+      const startX = activeItem.targetX;
+      const startY = activeItem.targetY;
+      const previewRect = previewRef.current.getBoundingClientRect();
+      const widthScale = (captureWidth || 1440) / previewRect.width;
+      const heightScale = (captureHeight || 900) / previewRect.height;
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        const deltaX = (moveEvent.clientX - startClientX) * widthScale;
+        const deltaY = (moveEvent.clientY - startClientY) * heightScale;
+        
+        const nextX = Math.round(startX + deltaX);
+        const nextY = Math.round(startY + deltaY);
+        
+        updateItem(activeItem.id, {
+          targetX: Math.max(0, Math.min((captureWidth || 1440) - activeItem.targetWidth, nextX)),
+          targetY: Math.max(0, Math.min((captureHeight || 900) - activeItem.targetHeight, nextY)),
+          result: undefined,
+          status: "captured"
+        });
+      };
+
+      const handleUp = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+      };
+
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
+    },
+    [activeItem, updateItem],
+  );
+
+  const handleResizeStart = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!activeItem?.captureData || !previewRef.current) return;
+
+      event.preventDefault();
+      const { width: captureWidth, height: captureHeight } = activeItem.captureData;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startWidth = activeItem.targetWidth;
+      const startHeight = activeItem.targetHeight;
+      const previewRect = previewRef.current.getBoundingClientRect();
+      const widthScale = (captureWidth || 1440) / previewRect.width;
+      const heightScale = (captureHeight || 900) / previewRect.height;
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        const nextWidth = Math.round(startWidth + (moveEvent.clientX - startX) * widthScale);
+        const nextHeight = Math.round(startHeight + (moveEvent.clientY - startY) * heightScale);
+        
+        updateItem(activeItem.id, {
+          targetWidth: Math.max(320, Math.min((captureWidth || 1440) - activeItem.targetX, nextWidth)),
+          targetHeight: Math.max(240, Math.min((captureHeight || 900) - activeItem.targetY, nextHeight)),
+          result: undefined,
+          status: "captured"
+        });
+      };
+
+      const handleUp = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+      };
+
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
+    },
+    [activeItem, updateItem],
+  );
 
   return (
-    <div className="max-w-5xl mx-auto space-y-16">
-      <form onSubmit={handleCapture} className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
-        <div className="flex items-center gap-4 bg-white/[0.03] border border-white/10 rounded-2xl px-5">
-          <Globe2 className="w-5 h-5 text-slate-500 shrink-0" />
-          <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://example.com"
-            className="w-full bg-transparent py-5 text-sm font-bold text-white outline-none placeholder:text-slate-700"
-          />
+    <div className="max-w-6xl mx-auto space-y-12">
+      {/* Input Section */}
+      <div className="bg-white/[0.02] border border-white/10 rounded-[32px] p-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center">
+              <Plus className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-white">Capture Queue</h3>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Add multiple URLs to batch process</p>
+            </div>
+          </div>
+          {urls.length > 0 && (
+            <div className="flex gap-4">
+              <Button 
+                variant="outline" 
+                onClick={handleBatchCapture}
+                disabled={urls.every(u => u.status !== "idle" && u.status !== "error")}
+                className="rounded-full border-white/10 text-xs font-black"
+              >
+                Batch Capture ({urls.filter(u => u.status === "idle").length})
+              </Button>
+              <Button 
+                variant="blue" 
+                onClick={handleBatchCompress}
+                disabled={!urls.some(u => u.status === "captured")}
+                className="rounded-full text-xs font-black px-8"
+              >
+                Batch Compress
+              </Button>
+            </div>
+          )}
         </div>
-        <Button
-          type="submit"
-          variant="blue"
-          size="xl"
-          disabled={!url.trim() || status === "capturing" || status === "compressing"}
-          className="rounded-2xl"
-        >
-          {status === "capturing" ? <Loader2 className="animate-spin" /> : <Maximize2 />}
-          전체 페이지 캡처
-        </Button>
-      </form>
 
-      {error && (
-        <div className="border border-red-500/20 bg-red-500/10 text-red-200 rounded-2xl px-5 py-4 text-sm font-bold">
-          {error}
-        </div>
-      )}
+        <form onSubmit={addUrl} className="flex gap-4">
+          <div className="flex-1 flex items-center gap-4 bg-white/[0.03] border border-white/10 rounded-2xl px-5">
+            <Globe2 className="w-5 h-5 text-slate-500 shrink-0" />
+            <textarea
+              value={inputUrl}
+              onChange={(e) => setInputUrl(e.target.value)}
+              placeholder="Enter URL(s) separated by newline or comma"
+              className="w-full bg-transparent py-5 text-sm font-bold text-white outline-none placeholder:text-slate-700 resize-none h-16"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  addUrl();
+                }
+              }}
+            />
+          </div>
+          <Button type="submit" variant="blue" size="xl" className="rounded-2xl px-10">
+            Add to Queue
+          </Button>
+        </form>
 
-      {capture?.sourceUrl && (
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-10 items-start">
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h3 className="text-2xl font-black text-white tracking-tight">Page Preview</h3>
-                <p className="text-xs text-slate-500 font-black uppercase tracking-[0.25em] mt-2">
-                  {capture.width} x {capture.height}px / {formatSize(capture.size || 0)}
-                </p>
-              </div>
-              {capture.downloadUrl && capture.filename && (
-                <button
-                  onClick={() => {
-                    if (capture.downloadUrl && capture.filename) {
-                      saveAs(capture.downloadUrl, capture.filename);
-                    }
-                  }}
-                  className="flex items-center gap-2 text-xs font-black text-white bg-white/5 border border-white/10 rounded-full px-5 py-3 hover:bg-white/10 transition-all"
+        {urls.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {urls.map((item) => (
+              <div 
+                key={item.id}
+                onClick={() => setActiveItemId(item.id)}
+                className={cn(
+                  "relative group flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer",
+                  activeItemId === item.id 
+                    ? "bg-white/10 border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.1)]" 
+                    : "bg-white/[0.03] border-white/5 hover:border-white/20"
+                )}
+              >
+                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
+                  {item.status === "capturing" || item.status === "compressing" ? (
+                    <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                  ) : item.status === "done" ? (
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Globe2 className="w-4 h-4 text-slate-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-black text-white truncate">{item.url}</div>
+                  <div className={cn(
+                    "text-[9px] font-black uppercase tracking-widest mt-1",
+                    item.status === "error" ? "text-red-500" : "text-slate-500"
+                  )}>
+                    {item.error || item.status}
+                  </div>
+                </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); removeUrl(item.id); }}
+                  className="opacity-0 group-hover:opacity-100 p-2 hover:text-red-500 transition-all"
                 >
-                  <Download className="w-4 h-4" />
-                  원본 다운로드
+                  <Trash2 className="w-4 h-4" />
                 </button>
-              )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {activeItem && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-12 items-start animate-fade-in">
+          {/* Preview Area */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-black text-white tracking-tight">Workspace</h3>
+                <p className="text-xs text-slate-500 font-black uppercase tracking-widest mt-1">{activeItem.url}</p>
+              </div>
+              <div className="flex gap-3">
+                {(activeItem.status === "idle" || activeItem.status === "error") && (
+                  <Button variant="blue" onClick={() => handleCapture(activeItem)} className="rounded-full px-8">
+                    Start Capture
+                  </Button>
+                )}
+                {activeItem.captureData?.downloadUrl && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => saveAs(activeItem.captureData!.downloadUrl!, activeItem.captureData!.filename!)}
+                    className="rounded-full border-white/10 text-xs font-black"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Original
+                  </Button>
+                )}
+              </div>
             </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-black/40 p-4 overflow-auto max-h-[720px]">
-              <div
-                ref={previewRef}
-                className="relative mx-auto overflow-hidden rounded-2xl border border-white/10 bg-white/5"
-                style={{ width: "min(100%, 720px)" }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={capture.sourceUrl}
-                  alt="Captured webpage preview"
-                  className="block w-full select-none"
-                  draggable={false}
-                />
-                <div
-                  className="absolute left-0 top-0 border-2 border-blue-400 bg-blue-500/10 shadow-[0_0_40px_rgba(59,130,246,0.25)]"
-                  style={{
-                    width: `${previewWidthPercent}%`,
-                    height: `${previewHeightPercent}%`,
-                    maxWidth: "100%",
-                    maxHeight: "100%",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onPointerDown={handleResizeStart}
-                    className="absolute -bottom-4 -right-4 h-9 w-9 rounded-full bg-blue-500 text-white border border-white/30 flex items-center justify-center cursor-nwse-resize shadow-xl"
-                    title="출력 크기 조절"
-                  >
-                    <Grip className="w-4 h-4" />
-                  </button>
+            <div className="rounded-[32px] border border-white/10 bg-black/40 p-6 overflow-auto max-h-[800px]">
+              {activeItem.status === "capturing" ? (
+                <div className="flex flex-col items-center justify-center py-40 space-y-6">
+                  <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+                  <div className="text-sm font-black text-slate-500 uppercase tracking-widest">Capturing Full Page...</div>
                 </div>
-              </div>
+              ) : activeItem.captureData?.sourceUrl ? (
+                <div
+                  ref={previewRef}
+                  className="relative mx-auto overflow-hidden rounded-2xl border border-white/10 bg-white/5"
+                  style={{ width: "min(100%, 800px)" }}
+                >
+                  <img
+                    src={activeItem.captureData.sourceUrl}
+                    alt="Preview"
+                    className="block w-full select-none"
+                    draggable={false}
+                  />
+                  <div
+                    className="absolute border-2 border-blue-400 bg-blue-500/10 shadow-[0_0_40px_rgba(59,130,246,0.25)] cursor-move"
+                    onPointerDown={handleMoveStart}
+                    style={{
+                      left: `${(activeItem.targetX / activeItem.captureData.width!) * 100}%`,
+                      top: `${(activeItem.targetY / activeItem.captureData.height!) * 100}%`,
+                      width: `${(activeItem.targetWidth / activeItem.captureData.width!) * 100}%`,
+                      height: `${(activeItem.targetHeight / activeItem.captureData.height!) * 100}%`,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onPointerDown={handleResizeStart}
+                      className="absolute -bottom-4 -right-4 h-9 w-9 rounded-full bg-blue-500 text-white border border-white/30 flex items-center justify-center cursor-nwse-resize shadow-xl"
+                    >
+                      <Grip className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-40 opacity-20">
+                  <Maximize2 className="w-16 h-16 mb-6" />
+                  <div className="text-xs font-black uppercase tracking-widest">Select an item to preview</div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="space-y-8 bg-white/[0.02] border border-white/10 rounded-[28px] p-6">
-            <div className="space-y-3">
-              <h4 className="text-xs font-black text-white uppercase tracking-[0.35em] opacity-50">
-                Output Size
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
-                  <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-2">
-                    Width
-                  </div>
-                  <div className="text-xl font-black text-white">{targetWidth}px</div>
-                </div>
-                <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
-                  <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-2">
-                    Height
-                  </div>
-                  <div className="text-xl font-black text-white">{targetHeight}px</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-xs font-black text-white uppercase tracking-[0.35em] opacity-50">
-                Export Format
-              </h4>
+          {/* Settings Area */}
+          <div className="space-y-8 bg-white/[0.02] border border-white/10 rounded-[32px] p-8">
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Batch Settings</h4>
               <div className="grid grid-cols-2 gap-2">
                 {FORMAT_OPTIONS.map((format) => (
                   <button
                     key={format}
-                    onClick={() => {
-                      setTargetFormat(format);
-                      resetResult();
-                    }}
+                    onClick={() => setGlobalFormat(format)}
                     className={cn(
                       "rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all",
-                      targetFormat === format
+                      globalFormat === format
                         ? "bg-white text-black"
                         : "bg-white/[0.04] text-slate-500 hover:text-white",
                     )}
@@ -314,61 +495,58 @@ export default function UrlCaptureOptimizer() {
               </div>
             </div>
 
-            <Button
-              onClick={handleCompress}
-              variant="blue"
-              size="xl"
-              disabled={status === "compressing"}
-              className="w-full rounded-2xl"
-            >
-              {status === "compressing" ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-              이미지 압축
-            </Button>
-
-            {result && (
-              <div className="space-y-4 border-t border-white/10 pt-6">
-                <div className="flex items-center gap-3 text-green-400 text-sm font-black">
-                  <CheckCircle2 className="w-5 h-5" />
-                  압축 완료
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-xs font-black">
-                  <div className="rounded-xl bg-white/[0.03] p-4 text-slate-500">
-                    BEFORE
-                    <div className="text-white text-lg mt-1">{formatSize(result.originalSize)}</div>
+            {activeItem.status === "captured" || activeItem.status === "done" ? (
+              <div className="space-y-6 pt-6 border-t border-white/5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Width</div>
+                    <div className="text-lg font-black text-white">{activeItem.targetWidth}px</div>
                   </div>
-                  <div className="rounded-xl bg-white/[0.03] p-4 text-slate-500">
-                    AFTER
-                    <div className="text-white text-lg mt-1">{formatSize(result.optimizedSize)}</div>
+                  <div className="space-y-2">
+                    <div className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Height</div>
+                    <div className="text-lg font-black text-white">{activeItem.targetHeight}px</div>
                   </div>
                 </div>
-                {reductionRate !== null && (
-                  <div className="text-xs font-black text-blue-300 uppercase tracking-widest">
-                    {reductionRate >= 0 ? "-" : "+"}
-                    {Math.abs(reductionRate).toFixed(1)}% SIZE CHANGE
-                  </div>
-                )}
-                <button
-                  onClick={() => saveAs(result.downloadUrl, result.filename)}
-                  className="w-full flex items-center justify-center gap-3 rounded-2xl bg-white text-black px-6 py-4 text-sm font-black hover:scale-[1.01] active:scale-[0.99] transition-all"
+                <Button 
+                  onClick={() => handleCompress(activeItem)} 
+                  variant="blue" 
+                  size="xl" 
+                  className="w-full rounded-2xl"
+                  disabled={activeItem.status === "compressing"}
                 >
-                  <Download className="w-5 h-5" />
-                  다운로드
-                </button>
+                  {activeItem.status === "compressing" ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+                  Compress Selection
+                </Button>
+              </div>
+            ) : null}
+
+            {urls.some(u => u.result) && (
+              <div className="space-y-6 pt-8 border-t border-white/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-green-400 text-xs font-black">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {urls.filter(u => u.result).length} READY
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    onClick={downloadZip}
+                    className="text-xs font-black text-blue-400 hover:text-blue-300"
+                  >
+                    <Layers className="w-4 h-4 mr-2" />
+                    Export all (.ZIP)
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {!capture && status !== "capturing" && (
-        <div className="flex flex-col items-center justify-center py-32 rounded-[48px] border-2 border-dashed border-white/5 bg-transparent">
-          <div className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center shadow-2xl mb-8">
-            {status === "error" ? <X className="w-7 h-7" /> : <ImageIcon className="w-7 h-7" />}
-          </div>
-          <h3 className="text-2xl font-bold text-white tracking-tight">URL을 입력해 캡처를 시작하세요</h3>
-          <p className="text-xs text-slate-500 font-black uppercase tracking-[0.3em] mt-3">
-            FULL PAGE CAPTURE / SCREENSHOT PRESET COMPRESSION
-          </p>
+      {urls.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-40 rounded-[48px] border-2 border-dashed border-white/5">
+          <Globe2 className="w-16 h-16 text-slate-800 mb-8" />
+          <h3 className="text-2xl font-bold text-white tracking-tight">Ready to capture the web.</h3>
+          <p className="text-xs text-slate-600 font-black uppercase tracking-[0.3em] mt-3">Enter a URL above to start your batch session</p>
         </div>
       )}
     </div>
