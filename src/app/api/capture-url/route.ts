@@ -133,6 +133,60 @@ function makeSafeFilename(url: URL) {
   return `${base || "webpage-capture"}.png`;
 }
 
+function createScreenshotUrl(accessKey: string, captureUrlString: string) {
+  const screenshotUrl = new URL("https://api.screenshotone.com/take");
+  screenshotUrl.searchParams.set("access_key", accessKey);
+  screenshotUrl.searchParams.set("url", captureUrlString);
+  screenshotUrl.searchParams.set("format", "png");
+  screenshotUrl.searchParams.set("response_type", "by_format");
+  screenshotUrl.searchParams.set("full_page", "true");
+  screenshotUrl.searchParams.set("full_page_scroll", "true");
+  screenshotUrl.searchParams.set("viewport_width", "1440");
+  screenshotUrl.searchParams.set("viewport_height", "900");
+  screenshotUrl.searchParams.set("block_ads", "true");
+  screenshotUrl.searchParams.set("block_cookie_banners", "true");
+  screenshotUrl.searchParams.set("delay", "5");
+  screenshotUrl.searchParams.set("wait_until", "networkidle2");
+  screenshotUrl.searchParams.set("styles", "html, body { height: auto !important; overflow: visible !important; }");
+  screenshotUrl.searchParams.set("timeout", "60");
+
+  return screenshotUrl;
+}
+
+async function fetchScreenshot(accessKey: string, captureUrlString: string) {
+  const screenshotResponse = await fetch(createScreenshotUrl(accessKey, captureUrlString), {
+    headers: { Accept: "image/png" },
+  });
+
+  if (screenshotResponse.ok) {
+    return Buffer.from(await screenshotResponse.arrayBuffer());
+  }
+
+  const errorText = await screenshotResponse.text();
+  throw new Error(errorText || "Failed to capture the page.");
+}
+
+async function fetchScreenshotWithProtocolFallback(accessKey: string, captureUrlString: string) {
+  try {
+    return await fetchScreenshot(accessKey, captureUrlString);
+  } catch (httpError) {
+    const parsedUrl = new URL(captureUrlString);
+    if (parsedUrl.protocol !== "http:") {
+      throw httpError;
+    }
+
+    parsedUrl.protocol = "https:";
+
+    try {
+      return await fetchScreenshot(accessKey, parsedUrl.href);
+    } catch (httpsError) {
+      const httpMessage = httpError instanceof Error ? httpError.message : "HTTP capture failed.";
+      const httpsMessage = httpsError instanceof Error ? httpsError.message : "HTTPS capture failed.";
+      throw new Error(`Failed to capture over HTTP or HTTPS. HTTP: ${httpMessage} HTTPS: ${httpsMessage}`);
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const accessKey = process.env.SCREENSHOTONE_ACCESS_KEY;
@@ -170,32 +224,7 @@ export async function POST(request: NextRequest) {
       filename: targetUrl.href,
     });
 
-    const screenshotUrl = new URL("https://api.screenshotone.com/take");
-    screenshotUrl.searchParams.set("access_key", accessKey);
-    screenshotUrl.searchParams.set("url", captureUrlString);
-    screenshotUrl.searchParams.set("format", "png");
-    screenshotUrl.searchParams.set("response_type", "by_format");
-    screenshotUrl.searchParams.set("full_page", "true");
-    screenshotUrl.searchParams.set("full_page_scroll", "true");
-    screenshotUrl.searchParams.set("viewport_width", "1440");
-    screenshotUrl.searchParams.set("viewport_height", "900");
-    screenshotUrl.searchParams.set("block_ads", "true");
-    screenshotUrl.searchParams.set("block_cookie_banners", "true");
-    screenshotUrl.searchParams.set("delay", "5");
-    screenshotUrl.searchParams.set("wait_until", "networkidle2");
-    screenshotUrl.searchParams.set("styles", "html, body { height: auto !important; overflow: visible !important; }");
-    screenshotUrl.searchParams.set("timeout", "60");
-
-    const screenshotResponse = await fetch(screenshotUrl, {
-      headers: { Accept: "image/png" },
-    });
-
-    if (!screenshotResponse.ok) {
-      const errorText = await screenshotResponse.text();
-      throw new Error(errorText || "Failed to capture the page.");
-    }
-
-    const sourceBuffer = Buffer.from(await screenshotResponse.arrayBuffer());
+    const sourceBuffer = await fetchScreenshotWithProtocolFallback(accessKey, captureUrlString);
     const image = sharp(sourceBuffer).rotate();
     const metadata = await image.metadata();
 
