@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import ImageOptimizer from "@/components/ImageOptimizer";
 import PdfToPngConverter from "@/components/PdfToPngConverter";
+import UrlCaptureOptimizer from "@/components/UrlCaptureOptimizer";
 import { ImageCategory } from "@/types/image";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -16,10 +17,11 @@ import {
   FileOutput,
   Layers,
   Command,
+  Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Category = "compressing" | "converter";
+type Category = "compressing" | "converter" | "url-capture";
 type ToolMode = ImageCategory | "pdf-to-png" | "webp" | "avif";
 
 const COMPRESSING_MODES: Array<{
@@ -89,7 +91,7 @@ export default function ToolWorkspace() {
     setCategory(cat);
     if (cat === "compressing") {
       setMode("screenshot");
-    } else {
+    } else if (cat === "converter") {
       setMode("pdf-to-png");
     }
   };
@@ -132,41 +134,52 @@ export default function ToolWorkspace() {
               <RefreshCcw className="w-4 h-4 mr-2" />
               포맷 변환
             </TabsTrigger>
+            <TabsTrigger
+              value="url-capture"
+              className="rounded-full px-10 text-sm font-black data-[state=active]:bg-white data-[state=active]:text-black transition-all"
+            >
+              <Camera className="w-4 h-4 mr-2" />
+              웹페이지 캡처
+            </TabsTrigger>
           </TabsList>
         </div>
 
         {/* Command Center Layout */}
         <div className="grid grid-cols-1 gap-1 border-t border-white/5 pt-16">
           {/* Sub-mode Selector - Minimalist Pill Buttons */}
-          <div className="flex flex-wrap justify-center gap-3 mb-24">
-            {(category === "compressing"
-              ? COMPRESSING_MODES
-              : CONVERTER_MODES
-            ).map((option) => (
-              <button
-                key={option.id}
-                onClick={() => setMode(option.id)}
-                className={cn(
-                  "group relative flex items-center gap-3 px-8 py-4 rounded-full border text-sm font-black transition-all",
-                  mode === option.id
-                    ? "bg-white border-white text-black shadow-[0_0_40px_rgba(255,255,255,0.2)]"
-                    : "bg-transparent border-white/10 text-slate-500 hover:border-white/30 hover:text-white",
-                )}
-              >
-                {option.icon}
-                {option.label}
-                {mode === option.id && (
-                  <span className="text-[10px] font-black opacity-40 ml-1 hidden md:inline tracking-widest">
-                    ACTIVE
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+          {category !== "url-capture" && (
+            <div className="flex flex-wrap justify-center gap-3 mb-24">
+              {(category === "compressing"
+                ? COMPRESSING_MODES
+                : CONVERTER_MODES
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  onClick={() => setMode(option.id)}
+                  className={cn(
+                    "group relative flex items-center gap-3 px-8 py-4 rounded-full border text-sm font-black transition-all",
+                    mode === option.id
+                      ? "bg-white border-white text-black shadow-[0_0_40px_rgba(255,255,255,0.2)]"
+                      : "bg-transparent border-white/10 text-slate-500 hover:border-white/30 hover:text-white",
+                  )}
+                >
+                  {option.icon}
+                  {option.label}
+                  {mode === option.id && (
+                    <span className="text-[10px] font-black opacity-40 ml-1 hidden md:inline tracking-widest">
+                      ACTIVE
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Tool Surface */}
           <div className="relative min-h-[500px]">
-            {category === "compressing" ? (
+            {category === "url-capture" ? (
+              <UrlCaptureOptimizer />
+            ) : category === "compressing" ? (
               <ImageOptimizer category={mode as ImageCategory} />
             ) : mode === "pdf-to-png" ? (
               <PdfToPngConverter />

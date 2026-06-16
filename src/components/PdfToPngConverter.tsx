@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { Button } from "@/components/ui/button";
-import { FileSearch, FileOutput, Download, Loader2, CheckCircle2, AlertCircle, Info, FileText } from "lucide-react";
+import { FileSearch, FileOutput, Loader2, CheckCircle2, AlertCircle, Info, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAX_PDF_SIZE = 20 * 1024 * 1024;

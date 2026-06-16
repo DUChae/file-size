@@ -7,7 +7,6 @@ import {
   BarChart,
   Brush,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -22,7 +21,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { 
   BarChart3, 
-  MessageSquare, 
   ArrowLeft, 
   Calendar, 
   Users, 
@@ -35,7 +33,6 @@ import {
   Trash2, 
   Loader2,
   Clock,
-  ExternalLink,
   Activity,
   MousePointer2
 } from "lucide-react";
@@ -80,7 +77,7 @@ function formatBytes(value: number) {
   })} ${units[unitIndex]}`;
 }
 
-function StatCard({ label, value, icon: Icon, subValue }: { label: string; value: number | string; icon: any; subValue?: string }) {
+function StatCard({ label, value, icon: Icon, subValue }: { label: string; value: number | string; icon: React.ComponentType<{ className?: string }>; subValue?: string }) {
   return (
     <Card className="glass-card border-white/5 rounded-2xl p-5 space-y-3">
       <div className="flex items-center justify-between">
@@ -112,7 +109,7 @@ function ChartCard({
   subtitle: string;
   empty?: boolean;
   children: ReactNode;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
     <Card className="glass-card border-white/5 rounded-[24px] overflow-hidden">

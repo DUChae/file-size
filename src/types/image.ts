@@ -30,6 +30,7 @@ export interface CompressionRequest {
   webWidth?: number;
   webHeight?: number;
   uploadId: string;
+  preserveSource?: boolean;
 }
 
 export interface CompressionResponse {
@@ -40,4 +41,17 @@ export interface CompressionResponse {
   outputFilename: string;
   outputUrl?: string;
   outputDownloadUrl?: string;
+}
+
+export interface UrlCaptureResponse {
+  success: boolean;
+  error?: string;
+  sourceUrl?: string;
+  downloadUrl?: string;
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+  captureId?: string;
 }

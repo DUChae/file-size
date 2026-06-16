@@ -18,11 +18,13 @@ function parseWebSizeDimension(value: number | undefined, label: string) {
 
 export async function POST(req: NextRequest) {
   let sourceUrl: string | null = null;
+  let shouldPreserveSource = false;
 
   try {
     const payload: CompressionRequest = await req.json();
-    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webWidth, webHeight, uploadId } = payload;
+    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webWidth, webHeight, uploadId, preserveSource } = payload;
     sourceUrl = requestSourceUrl;
+    shouldPreserveSource = !!preserveSource;
 
     await trackAnalyticsEvent({
       type: "image_job_started",
@@ -104,21 +106,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (category === "web") {
-      const targetWidth = parseWebSizeDimension(webWidth, "Width");
-      const targetHeight = parseWebSizeDimension(webHeight, "Height");
-      if (targetWidth && targetHeight) {
-        const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif" || outputMime === "image/gif")
-          ? { r: 255, g: 255, b: 255, alpha: 0 }
-          : { r: 255, g: 255, b: 255, alpha: 1 };
+    const targetWidth = parseWebSizeDimension(webWidth, "Width");
+    const targetHeight = parseWebSizeDimension(webHeight, "Height");
+    if (targetWidth && targetHeight) {
+      const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif" || outputMime === "image/gif")
+        ? { r: 255, g: 255, b: 255, alpha: 0 }
+        : { r: 255, g: 255, b: 255, alpha: 1 };
 
-        sharpInstance = sharpInstance.resize(targetWidth, targetHeight, {
-          fit: "contain",
-          position: "centre",
-          background,
-          withoutEnlargement: true,
-        });
-      }
+      sharpInstance = sharpInstance.resize(targetWidth, targetHeight, {
+        fit: category === "screenshot" ? "fill" : "contain",
+        position: "centre",
+        background,
+        withoutEnlargement: true,
+      });
     }
 
     let outputBuffer: Buffer;
@@ -212,8 +212,10 @@ export async function POST(req: NextRequest) {
       optimizedSize: finalBuffer.length,
     });
 
-    await del(sourceUrl);
-    sourceUrl = null;
+    if (!shouldPreserveSource) {
+      await del(sourceUrl);
+      sourceUrl = null;
+    }
 
     return NextResponse.json<CompressionResponse>({
       success: true,
@@ -233,7 +235,7 @@ export async function POST(req: NextRequest) {
       error: error instanceof Error ? error.message : "Internal server error",
     });
 
-    if (sourceUrl) {
+    if (sourceUrl && !shouldPreserveSource) {
       try {
         await del(sourceUrl);
       } catch {

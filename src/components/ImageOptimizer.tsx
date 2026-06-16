@@ -7,22 +7,17 @@ import {
 } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
-import { Button } from "@/components/ui/button";
 import {
   Upload,
   Download,
   X,
   Loader2,
-  Sparkles,
-  CheckCircle2,
   Info,
-  ArrowRight,
   Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAX_FILES = 10;
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const CONCURRENCY = 2;
 
 export default function ImageOptimizer({
