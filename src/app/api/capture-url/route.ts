@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_CAPTURE_HEIGHT = 30000;
-const MINUTE_LIMIT = 5;
+const MINUTE_LIMIT = 20;
 const DAY_LIMIT = 50;
 const minuteRequests = new Map<string, { count: number; resetAt: number }>();
 const dailyRequests = new Map<string, { count: number; date: string }>();

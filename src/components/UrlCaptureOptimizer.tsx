@@ -85,6 +85,16 @@ function createCaptureItem(rawUrl: string): CaptureItem | null {
   };
 }
 
+async function parseResponseJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(text || "Invalid server response.");
+  }
+}
+
 export default function UrlCaptureOptimizer() {
   const [urls, setUrls] = useState<CaptureItem[]>([]);
   const [inputUrl, setInputUrl] = useState("");
@@ -122,8 +132,10 @@ export default function UrlCaptureOptimizer() {
     setUrls(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   }, []);
 
-  const handleCapture = async (item: CaptureItem) => {
-    updateItem(item.id, { status: "capturing", error: undefined, captureData: undefined, result: undefined });
+  const handleCapture = async (item: CaptureItem, markAsCapturing = true) => {
+    if (markAsCapturing) {
+      updateItem(item.id, { status: "capturing", error: undefined, captureData: undefined, result: undefined });
+    }
 
     try {
       const response = await fetch("/api/capture-url", {
@@ -131,7 +143,7 @@ export default function UrlCaptureOptimizer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: item.url }),
       });
-      const data = (await response.json()) as UrlCaptureResponse;
+      const data = await parseResponseJson<UrlCaptureResponse>(response);
 
       if (!response.ok || !data.success || !data.sourceUrl || !data.width || !data.height) {
         throw new Error(data.error || "Failed to capture the page.");
@@ -155,8 +167,18 @@ export default function UrlCaptureOptimizer() {
 
   const handleBatchCapture = async () => {
     const idleItems = urls.filter(u => u.status === "idle" || u.status === "error");
+    const idleIds = new Set(idleItems.map(item => item.id));
+
+    setUrls(prev => prev.map(item => idleIds.has(item.id) ? {
+      ...item,
+      status: "capturing",
+      error: undefined,
+      captureData: undefined,
+      result: undefined,
+    } : item));
+
     for (const item of idleItems) {
-      await handleCapture(item);
+      await handleCapture(item, false);
     }
   };
 
