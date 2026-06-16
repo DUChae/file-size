@@ -159,14 +159,33 @@ export async function POST(request: NextRequest) {
     screenshotUrl.searchParams.set("response_type", "by_format");
     screenshotUrl.searchParams.set("full_page", "true");
     screenshotUrl.searchParams.set("full_page_scroll", "true");
-    screenshotUrl.searchParams.set("full_page_scroll_delay", "1000");
+    screenshotUrl.searchParams.set("full_page_scroll_delay", "1500");
     screenshotUrl.searchParams.set("viewport_width", "1440");
     screenshotUrl.searchParams.set("viewport_height", "900");
     screenshotUrl.searchParams.set("block_ads", "true");
     screenshotUrl.searchParams.set("block_cookie_banners", "true");
-    screenshotUrl.searchParams.set("delay", "5");
+    screenshotUrl.searchParams.set("delay", "7");
     screenshotUrl.searchParams.set("wait_until", "networkidle2");
-    screenshotUrl.searchParams.set("styles", "html,body{height:auto !important;overflow:visible !important;}");
+    screenshotUrl.searchParams.set("styles", "html, body, #wrap, #container { height: auto !important; overflow: visible !important; position: relative !important; } .section, section, div[class*='section'] { height: auto !important; min-height: 100vh !important; position: relative !important; } #contentFrame { height: 20000px !important; }");
+    screenshotUrl.searchParams.set("scripts", `
+      (function() {
+        const iframe = document.getElementById('contentFrame');
+        if (iframe) {
+          try {
+            // Attempt to auto-size if same-origin
+            const height = iframe.contentWindow.document.body.scrollHeight;
+            if (height > 0) iframe.style.height = height + 'px';
+          } catch (e) {
+            // Fallback for cross-origin or if above fails
+            iframe.style.setProperty('height', '15000px', 'important');
+          }
+          iframe.style.setProperty('position', 'relative', 'important');
+          document.body.style.setProperty('height', 'auto', 'important');
+          document.documentElement.style.setProperty('height', 'auto', 'important');
+          document.body.style.setProperty('overflow', 'visible', 'important');
+        }
+      })();
+    `);
     screenshotUrl.searchParams.set("timeout", "60");
 
     const screenshotResponse = await fetch(screenshotUrl, {
