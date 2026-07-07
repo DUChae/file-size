@@ -105,46 +105,55 @@ export default function ToolWorkspace() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-20 animate-fade-in">
+    <div className="max-w-6xl mx-auto px-5 py-14 md:py-16 animate-fade-in">
       {/* Hero Section */}
-      <div className="flex flex-col items-center text-center space-y-6 mb-24">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-black text-slate-400 uppercase tracking-widest">
+      <div className="grid gap-8 md:grid-cols-[1fr_auto] md:items-end mb-16">
+        <div className="space-y-6">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-3.5 py-1.5 text-xs font-semibold text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
           <Command className="w-3.5 h-3.5" />
           Pro Image Processing
         </div>
-        <h1 className="text-6xl md:text-8xl font-black tracking-ultra-tight text-white leading-none">
-          IMAGE <span className="text-blue-500">LAB.</span>
+        <h1 className="max-w-3xl text-5xl md:text-7xl font-black tracking-ultra-tight text-white leading-[0.95]">
+          IMAGE <span className="text-teal-300">LAB.</span>
         </h1>
-        <p className="text-xl md:text-2xl text-slate-400 font-medium max-w-2xl leading-relaxed">
+        <p className="text-lg md:text-xl text-slate-400 font-medium max-w-2xl leading-relaxed">
           압축/변환을 목적으로 합니다.
           <br /> 개선사항 혹은 요청사항은 우측상단 feedback을 남겨주세요.
         </p>
+        </div>
+        <div className="hidden md:grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-2 backdrop-blur-xl">
+          {["Local", "A4 PDF", "Batch"].map((item) => (
+            <div key={item} className="rounded-xl bg-black/20 px-4 py-3 text-center text-xs font-bold text-slate-300">
+              {item}
+            </div>
+          ))}
+        </div>
       </div>
 
       <Tabs
         value={category}
         onValueChange={handleCategoryChange}
-        className="w-full space-y-16"
+        className="w-full space-y-12"
       >
-        <div className="flex justify-center">
-          <TabsList className="bg-white/[0.03] border border-white/[0.08] p-1.5 h-14 rounded-full">
+        <div className="flex justify-start overflow-x-auto pb-2">
+          <TabsList className="h-[52px] rounded-2xl border border-white/10 bg-white/[0.045] p-1.5 backdrop-blur-xl">
             <TabsTrigger
               value="compressing"
-              className="rounded-full px-10 text-sm font-black data-[state=active]:bg-white data-[state=active]:text-black transition-all"
+              className="rounded-xl px-6 text-sm font-bold text-slate-400 data-[state=active]:bg-white data-[state=active]:text-black transition-all"
             >
               <Package className="w-4 h-4 mr-2" />
               이미지 압축
             </TabsTrigger>
             <TabsTrigger
               value="converter"
-              className="rounded-full px-10 text-sm font-black data-[state=active]:bg-white data-[state=active]:text-black transition-all"
+              className="rounded-xl px-6 text-sm font-bold text-slate-400 data-[state=active]:bg-white data-[state=active]:text-black transition-all"
             >
               <RefreshCcw className="w-4 h-4 mr-2" />
               포맷 변환
             </TabsTrigger>
             <TabsTrigger
               value="url-capture"
-              className="rounded-full px-10 text-sm font-black data-[state=active]:bg-white data-[state=active]:text-black transition-all"
+              className="rounded-xl px-6 text-sm font-bold text-slate-400 data-[state=active]:bg-white data-[state=active]:text-black transition-all"
             >
               <Camera className="w-4 h-4 mr-2" />
               웹페이지 캡처
@@ -153,10 +162,10 @@ export default function ToolWorkspace() {
         </div>
 
         {/* Command Center Layout */}
-        <div className="grid grid-cols-1 gap-1 border-t border-white/5 pt-16">
+        <div className="grid grid-cols-1 gap-1 border-t border-white/10 pt-10">
           {/* Sub-mode Selector - Minimalist Pill Buttons */}
           {category !== "url-capture" && (
-            <div className="flex flex-wrap justify-center gap-3 mb-24">
+            <div className="flex flex-wrap gap-3 mb-14">
               {(category === "compressing"
                 ? COMPRESSING_MODES
                 : CONVERTER_MODES
@@ -165,10 +174,10 @@ export default function ToolWorkspace() {
                   key={option.id}
                   onClick={() => setMode(option.id)}
                   className={cn(
-                    "group relative flex items-center gap-3 px-8 py-4 rounded-full border text-sm font-black transition-all",
+                    "group relative flex items-center gap-3 px-5 py-3.5 rounded-2xl border text-sm font-bold transition-all active:scale-[0.98]",
                     mode === option.id
-                      ? "bg-white border-white text-black shadow-[0_0_40px_rgba(255,255,255,0.2)]"
-                      : "bg-transparent border-white/10 text-slate-500 hover:border-white/30 hover:text-white",
+                      ? "bg-white border-white text-black shadow-[0_16px_50px_rgba(255,255,255,0.12)]"
+                      : "bg-white/[0.025] border-white/10 text-slate-500 hover:border-white/20 hover:bg-white/[0.045] hover:text-white",
                   )}
                 >
                   {option.icon}
@@ -204,11 +213,11 @@ export default function ToolWorkspace() {
       </Tabs>
 
       {/* Footer Branding */}
-      <div className="mt-40 pt-16 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8 opacity-40 grayscale hover:opacity-100 hover:grayscale-0 transition-all">
-        <div className="text-xs font-black text-white uppercase tracking-widest">
+      <div className="mt-28 pt-10 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6 opacity-60 hover:opacity-100 transition-all">
+        <div className="text-xs font-semibold text-white">
           Engineered for performance & privacy.
         </div>
-        <div className="flex gap-12 text-xs font-bold text-slate-400 uppercase tracking-widest">
+        <div className="flex flex-wrap justify-center gap-5 text-xs font-medium text-slate-400">
           <span>GPU Accelerated</span>
           <span>Lossless Encoding</span>
           <span>Zero Server Storage</span>

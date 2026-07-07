@@ -417,7 +417,7 @@ export default function ImageToPdfConverter() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-12 pb-16 border-b border-white/5">
         <div className="space-y-6 max-w-2xl">
           <div className="space-y-3">
-            <h4 className="text-xs font-black text-blue-500 uppercase tracking-[0.4em] opacity-80 flex items-center gap-2">
+            <h4 className="text-xs font-semibold text-teal-300 flex items-center gap-2">
               <FileImage className="w-4 h-4" />
               Document Assembly
             </h4>
@@ -460,7 +460,7 @@ export default function ImageToPdfConverter() {
             size="lg"
             onClick={handleConvert}
             disabled={items.length === 0 || isBusy}
-            className="rounded-full h-14 px-10 text-xs font-black tracking-widest shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-105"
+            className="rounded-2xl h-14 px-8 text-xs font-black tracking-widest active:scale-[0.98]"
           >
             {isBusy ? (
               <>
@@ -478,22 +478,22 @@ export default function ImageToPdfConverter() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
           <div className="text-xs font-black text-slate-600 uppercase tracking-widest">
             Page Order
           </div>
           <div className="text-sm text-white font-bold flex items-center gap-3">
-            <div className={cn("w-2 h-2 rounded-full", items.length ? "bg-blue-500" : "bg-slate-800")} />
+            <div className={cn("w-2 h-2 rounded-full", items.length ? "bg-teal-300" : "bg-slate-800")} />
             {items.length ? `${items.length} pages ready` : "No images"}
           </div>
         </div>
-        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
           <div className="text-xs font-black text-slate-600 uppercase tracking-widest">
             Source Size
           </div>
           <div className="text-3xl font-black text-white">{formatSize(totalOriginalSize)}</div>
         </div>
-        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
           <div className="text-xs font-black text-slate-600 uppercase tracking-widest">
             Job Status
           </div>
@@ -505,7 +505,7 @@ export default function ImageToPdfConverter() {
                 : status === "error"
                   ? "text-red-500"
                   : status === "compressing"
-                    ? "text-blue-500"
+                    ? "text-teal-300"
                     : "text-slate-500",
             )}
           >
@@ -535,7 +535,7 @@ export default function ImageToPdfConverter() {
       <div
         className={cn(
           "space-y-5 rounded-3xl border border-transparent transition-all",
-          isDragging && "border-blue-500/40 bg-blue-500/[0.04] p-4",
+          isDragging && "border-teal-300/40 bg-teal-300/[0.04] p-4",
         )}
         onDragOver={handleDragOver}
         onDragEnter={handleDragOver}
@@ -568,7 +568,7 @@ export default function ImageToPdfConverter() {
             <div
               className={cn(
                 "rounded-3xl border border-dashed bg-white/[0.02] p-12 text-center transition-all",
-                isDragging ? "border-blue-500/60" : "border-white/10",
+                isDragging ? "border-teal-300/60" : "border-white/10",
               )}
             >
               <div className="space-y-3">

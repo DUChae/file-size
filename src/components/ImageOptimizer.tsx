@@ -160,19 +160,19 @@ export default function ImageOptimizer({
     queue.every((i) => i.status === "done" || i.status === "error");
 
   return (
-    <div className="max-w-5xl mx-auto space-y-24">
+    <div className="max-w-5xl mx-auto space-y-16">
       {/* Settings Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-start">
-        <div className="space-y-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-start">
+        <div className="space-y-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6 md:p-8 backdrop-blur-xl">
           <div className="space-y-6">
-            <h4 className="text-xs font-black text-white uppercase tracking-[0.4em] opacity-40">
+            <h4 className="text-xs font-semibold text-slate-500">
               Configuration
             </h4>
             <div className="space-y-4">
               <h3 className="text-3xl font-black tracking-ultra-tight text-white flex items-center gap-4">
                 {forcedFormat ? (
                   <>
-                    <span className="text-blue-500">
+                    <span className="text-teal-300">
                       {forcedFormat.toUpperCase()}
                     </span>{" "}
                     Converter
@@ -206,11 +206,11 @@ export default function ImageOptimizer({
           </div>
 
           {category === "web" && (
-            <div className="space-y-6 pt-6 border-t border-white/5">
-              <h4 className="text-xs font-black text-white uppercase tracking-[0.4em] opacity-40">
+            <div className="space-y-6 pt-6 border-t border-white/10">
+              <h4 className="text-xs font-semibold text-slate-500">
                 Output Dimensions
               </h4>
-              <div className="flex items-center gap-6 bg-white/[0.02] border border-white/10 rounded-2xl p-1.5 px-4">
+              <div className="flex items-center gap-6 bg-black/20 border border-white/10 rounded-2xl p-1.5 px-4">
                 <input
                   value={globalWebWidth}
                   onChange={(event) =>
@@ -233,12 +233,12 @@ export default function ImageOptimizer({
           )}
         </div>
 
-        <div className="space-y-10">
+        <div className="space-y-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6 md:p-8 backdrop-blur-xl">
           <div className="space-y-6">
-            <h4 className="text-xs font-black text-white uppercase tracking-[0.4em] opacity-40">
+            <h4 className="text-xs font-semibold text-slate-500">
               Export Format
             </h4>
-            <div className="grid grid-cols-6 gap-2 p-1.5 bg-white/[0.03] border border-white/10 rounded-2xl">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 p-1.5 bg-black/20 border border-white/10 rounded-2xl">
               {(["original", "png", "jpeg", "webp", "avif", "gif"] as const).map(
                 (fmt) => (
                   <button
@@ -246,7 +246,7 @@ export default function ImageOptimizer({
                     onClick={() => !forcedFormat && setGlobalFormat(fmt)}
                     disabled={!!forcedFormat}
                     className={cn(
-                      "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider",
+                      "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider active:scale-[0.98]",
                       globalFormat === fmt
                         ? "bg-white text-black shadow-xl"
                         : "text-slate-500 hover:text-white disabled:opacity-20",
@@ -258,12 +258,12 @@ export default function ImageOptimizer({
               )}
             </div>
           </div>
-          <div className="bg-blue-600/[0.04] border border-blue-500/10 rounded-2xl p-6">
-            <div className="text-[11px] font-black text-blue-500 mb-2 flex items-center gap-2 tracking-widest uppercase">
+          <div className="bg-teal-300/[0.045] border border-teal-300/10 rounded-2xl p-6">
+            <div className="text-[11px] font-black text-teal-300 mb-2 flex items-center gap-2 tracking-widest uppercase">
               <Info className="w-3.5 h-3.5" />
               Technical Insight
             </div>
-            <p className="text-sm text-blue-200/60 font-medium leading-relaxed">
+            <p className="text-sm text-teal-50/60 font-medium leading-relaxed">
               {globalFormat === "original" &&
                 "원본 인코딩 프로토콜을 계승하며 메타데이터 정제와 고효율 블록 압축을 동시에 수행합니다."}
               {globalFormat === "png" &&
@@ -295,10 +295,10 @@ export default function ImageOptimizer({
         }}
         onClick={() => document.getElementById("fileInput")?.click()}
         className={cn(
-          "group relative flex flex-col items-center justify-center py-32 rounded-[48px] transition-all cursor-pointer border-2 border-dashed",
+          "group relative flex flex-col items-center justify-center py-24 rounded-3xl transition-all cursor-pointer border border-dashed backdrop-blur-xl",
           isDragging
-            ? "bg-white/10 border-white scale-[0.99] shadow-[0_0_80px_rgba(255,255,255,0.15)]"
-            : "bg-transparent border-white/5 hover:bg-white/[0.02] hover:border-white/20",
+            ? "bg-teal-300/10 border-teal-300/70 scale-[0.99]"
+            : "bg-white/[0.025] border-white/10 hover:bg-white/[0.045] hover:border-white/20",
         )}
       >
         <input
@@ -310,15 +310,15 @@ export default function ImageOptimizer({
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
         />
         <div className="flex flex-col items-center space-y-8">
-          <div className="w-16 h-16 bg-white text-black rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-2xl">
+          <div className="w-16 h-16 bg-white text-black rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform shadow-2xl">
             <Upload className="w-7 h-7" />
           </div>
           <div className="text-center space-y-2">
             <h3 className="text-2xl font-bold text-white tracking-tight">
               작업을 시작하려면 파일을 드롭하세요
             </h3>
-            <p className="text-xs text-slate-500 font-black uppercase tracking-[0.3em]">
-              MAX 20MB / PRO ENCODING SUPPORTED
+            <p className="text-xs text-slate-500 font-semibold">
+              Large uploads supported through direct Blob upload
             </p>
           </div>
         </div>
@@ -329,7 +329,7 @@ export default function ImageOptimizer({
         <div className="space-y-10 animate-fade-in pb-20">
           <div className="flex justify-between items-center px-6">
             <div className="flex items-center gap-6">
-              <h2 className="text-base font-black text-white uppercase tracking-[0.3em]">
+              <h2 className="text-base font-black text-white">
                 Processing Queue
               </h2>
               <span className="text-[10px] font-black bg-white/5 text-slate-400 px-3 py-1.5 rounded-full border border-white/10">
@@ -340,14 +340,14 @@ export default function ImageOptimizer({
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => downloadAllAsZip(queue)}
-                  className="flex items-center gap-3 text-xs font-black bg-blue-600 text-white px-8 py-4 rounded-full hover:bg-blue-500 transition-all shadow-[0_0_30px_rgba(59,130,246,0.4)] hover:scale-105 active:scale-95"
+                  className="flex items-center gap-3 text-xs font-black bg-white text-black px-6 py-3.5 rounded-2xl hover:bg-teal-100 transition-all active:scale-[0.98]"
                 >
                   <Download className="w-4 h-4" />
                   EXPORT ALL AS BUNDLE (.ZIP)
                 </button>
                 <button
                   onClick={() => setQueue([])}
-                  className="flex items-center gap-3 text-xs font-black bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-full transition-all hover:scale-105 active:scale-95 border border-white/10"
+                  className="flex items-center gap-3 text-xs font-black bg-white/5 hover:bg-white/10 text-white px-6 py-3.5 rounded-2xl transition-all active:scale-[0.98] border border-white/10"
                 >
                   <X className="w-4 h-4" />
                   CLEAR
@@ -356,12 +356,12 @@ export default function ImageOptimizer({
             )}
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-[32px] overflow-hidden backdrop-blur-xl">
+          <div className="bg-white/[0.025] border border-white/10 rounded-3xl overflow-hidden backdrop-blur-xl">
             <div className="divide-y divide-white/[0.05]">
               {queue.map((item) => (
                 <div
                   key={item.id}
-                  className="p-8 flex items-center gap-10 group hover:bg-white/[0.02] transition-colors"
+                  className="p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors"
                 >
                   <div className="flex-1 min-w-0 flex items-center gap-8">
                     <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 shadow-inner group-hover:border-white/20 transition-colors">
@@ -416,7 +416,7 @@ export default function ImageOptimizer({
                         <X className="w-5 h-5" />
                       </button>
                     ) : (
-                      <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                      <Loader2 className="w-6 h-6 text-teal-300 animate-spin" />
                     )}
                   </div>
                 </div>
@@ -446,7 +446,7 @@ function StatusBadge({ status }: { status: QueueStatus }) {
           : status === "error"
             ? "text-red-500 bg-red-500/10"
             : status === "compressing"
-              ? "text-blue-500 bg-blue-500/10 animate-pulse"
+              ? "text-teal-300 bg-teal-300/10 animate-pulse"
               : "text-slate-600 bg-white/5",
       )}
     >

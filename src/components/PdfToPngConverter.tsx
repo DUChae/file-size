@@ -174,7 +174,7 @@ export default function PdfToPngConverter() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-12 pb-16 border-b border-white/5">
         <div className="space-y-6 max-w-2xl">
           <div className="space-y-3">
-            <h4 className="text-xs font-black text-blue-500 uppercase tracking-[0.4em] opacity-80 flex items-center gap-2">
+            <h4 className="text-xs font-semibold text-teal-300 flex items-center gap-2">
               <FileText className="w-4 h-4" />
               Document Processing
             </h4>
@@ -205,7 +205,7 @@ export default function PdfToPngConverter() {
             size="lg" 
             onClick={handleConvert}
             disabled={!file || status === "converting"}
-            className="rounded-full h-14 px-10 text-xs font-black tracking-widest shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-105"
+            className="rounded-2xl h-14 px-8 text-xs font-black tracking-widest active:scale-[0.98]"
           >
             {status === "converting" ? (
               <>
@@ -223,22 +223,22 @@ export default function PdfToPngConverter() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
           <div className="text-xs font-black text-slate-600 uppercase tracking-widest">Source Document</div>
           <div className="text-sm text-white font-bold truncate flex items-center gap-3">
-            {file ? <div className="w-2 h-2 rounded-full bg-blue-500" /> : <div className="w-2 h-2 rounded-full bg-slate-800" />}
+            {file ? <div className="w-2 h-2 rounded-full bg-teal-300" /> : <div className="w-2 h-2 rounded-full bg-slate-800" />}
             {fileSummary ?? "No selection"}
           </div>
         </div>
-        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
           <div className="text-xs font-black text-slate-600 uppercase tracking-widest">Page Count</div>
           <div className="text-3xl font-black text-white">{pageCount ?? "--"}</div>
         </div>
-        <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
           <div className="text-xs font-black text-slate-600 uppercase tracking-widest">Job Status</div>
           <div className={cn(
             "text-xs font-black flex items-center gap-3 uppercase tracking-widest",
-            status === 'done' ? "text-green-500" : status === 'error' ? "text-red-500" : status === 'converting' ? "text-blue-500" : "text-slate-500"
+            status === 'done' ? "text-green-500" : status === 'error' ? "text-red-500" : status === 'converting' ? "text-teal-300" : "text-slate-500"
           )}>
             {status === "idle" && "Ready"}
             {status === "converting" && <Loader2 className="w-4 h-4 animate-spin" />}
