@@ -195,6 +195,7 @@ export default function ImageToPdfConverter() {
   const [status, setStatus] = useState<ConversionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [outputSize, setOutputSize] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const itemsRef = useRef<ImageQueueItem[]>([]);
 
   const isBusy = status === "compressing";
@@ -270,6 +271,26 @@ export default function ImageToPdfConverter() {
         }
       }),
     );
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!isBusy) setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+    void handleFiles(event.dataTransfer.files);
   };
 
   const removeItem = (id: string) => {
@@ -511,7 +532,16 @@ export default function ImageToPdfConverter() {
         </div>
       )}
 
-      <div className="space-y-5">
+      <div
+        className={cn(
+          "space-y-5 rounded-3xl border border-transparent transition-all",
+          isDragging && "border-blue-500/40 bg-blue-500/[0.04] p-4",
+        )}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4 text-slate-500 bg-white/[0.01] p-5 rounded-2xl border border-white/5">
             <Info className="w-5 h-5 shrink-0" />
@@ -535,9 +565,19 @@ export default function ImageToPdfConverter() {
 
         <div className="space-y-3">
           {items.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.02] p-12 text-center">
-              <div className="text-sm font-black text-slate-500 uppercase tracking-widest">
-                Upload PNG, JPG, or WebP images
+            <div
+              className={cn(
+                "rounded-3xl border border-dashed bg-white/[0.02] p-12 text-center transition-all",
+                isDragging ? "border-blue-500/60" : "border-white/10",
+              )}
+            >
+              <div className="space-y-3">
+                <div className="text-sm font-black text-slate-500 uppercase tracking-widest">
+                  Drop PNG, JPG, or WebP images
+                </div>
+                <div className="text-xs font-bold uppercase tracking-[0.15em] text-slate-700">
+                  or use SELECT IMAGES
+                </div>
               </div>
             </div>
           ) : (
