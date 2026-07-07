@@ -46,6 +46,8 @@ interface PreparedImage {
   originalName: string;
   originalSize: number;
   compressedSize: number;
+  pageWidth: number;
+  pageHeight: number;
 }
 
 function formatSize(bytes: number) {
@@ -122,6 +124,11 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: PdfImageMime, quality?: n
 
 async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> {
   const image = await loadImageFromFile(item.file);
+  const isLandscape = image.naturalWidth > image.naturalHeight;
+  const targetWidthPx = isLandscape ? A4_HEIGHT_PX : A4_WIDTH_PX;
+  const targetHeightPx = isLandscape ? A4_WIDTH_PX : A4_HEIGHT_PX;
+  const pageWidth = isLandscape ? A4_HEIGHT_PT : A4_WIDTH_PT;
+  const pageHeight = isLandscape ? A4_WIDTH_PT : A4_HEIGHT_PT;
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d", { willReadFrequently: item.type === "image/png" });
 
@@ -129,15 +136,15 @@ async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> 
     throw new Error("Canvas context를 만들 수 없습니다.");
   }
 
-  canvas.width = A4_WIDTH_PX;
-  canvas.height = A4_HEIGHT_PX;
+  canvas.width = targetWidthPx;
+  canvas.height = targetHeightPx;
   context.clearRect(0, 0, canvas.width, canvas.height);
 
-  const scale = Math.min(A4_WIDTH_PX / image.naturalWidth, A4_HEIGHT_PX / image.naturalHeight);
+  const scale = Math.min(targetWidthPx / image.naturalWidth, targetHeightPx / image.naturalHeight);
   const drawWidthPx = Math.round(image.naturalWidth * scale);
   const drawHeightPx = Math.round(image.naturalHeight * scale);
-  const offsetXPx = Math.round((A4_WIDTH_PX - drawWidthPx) / 2);
-  const offsetYPx = Math.round((A4_HEIGHT_PX - drawHeightPx) / 2);
+  const offsetXPx = Math.round((targetWidthPx - drawWidthPx) / 2);
+  const offsetYPx = Math.round((targetHeightPx - drawHeightPx) / 2);
 
   let outputMime: PdfImageMime = "image/jpeg";
 
@@ -166,6 +173,8 @@ async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> 
     originalName: item.name,
     originalSize: item.size,
     compressedSize: blob.size,
+    pageWidth,
+    pageHeight,
   };
 }
 
@@ -334,12 +343,12 @@ export default function ImageToPdfConverter() {
           prepared.mimeType === "image/png"
             ? await pdfDoc.embedPng(prepared.bytes)
             : await pdfDoc.embedJpg(prepared.bytes);
-        const page = pdfDoc.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
+        const page = pdfDoc.addPage([prepared.pageWidth, prepared.pageHeight]);
         page.drawImage(embeddedImage, {
           x: 0,
           y: 0,
-          width: A4_WIDTH_PT,
-          height: A4_HEIGHT_PT,
+          width: prepared.pageWidth,
+          height: prepared.pageHeight,
         });
       }
 
@@ -396,7 +405,7 @@ export default function ImageToPdfConverter() {
             </h2>
           </div>
           <p className="text-base text-slate-400 font-medium leading-relaxed">
-            PNG, JPG, WebP 이미지를 업로드한 뒤 페이지 순서를 조정하고, 현재 순서 그대로 A4 PDF 1개를 생성합니다. 이미지는 PDF 생성 전에 A4 기준으로 압축됩니다.
+            PNG, JPG, WebP 이미지를 업로드한 뒤 페이지 순서를 조정하고, 현재 순서 그대로 A4 PDF 1개를 생성합니다. 가로 이미지는 A4 가로 페이지, 세로 이미지는 A4 세로 페이지에 맞춰 압축됩니다.
           </p>
         </div>
 
