@@ -46,12 +46,6 @@ interface PreparedImage {
   originalName: string;
   originalSize: number;
   compressedSize: number;
-  sourceWidth: number;
-  sourceHeight: number;
-  drawWidth: number;
-  drawHeight: number;
-  offsetX: number;
-  offsetY: number;
 }
 
 function formatSize(bytes: number) {
@@ -172,12 +166,6 @@ async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> 
     originalName: item.name,
     originalSize: item.size,
     compressedSize: blob.size,
-    sourceWidth: image.naturalWidth,
-    sourceHeight: image.naturalHeight,
-    drawWidth: (drawWidthPx / A4_WIDTH_PX) * A4_WIDTH_PT,
-    drawHeight: (drawHeightPx / A4_HEIGHT_PX) * A4_HEIGHT_PT,
-    offsetX: (offsetXPx / A4_WIDTH_PX) * A4_WIDTH_PT,
-    offsetY: A4_HEIGHT_PT - ((offsetYPx + drawHeightPx) / A4_HEIGHT_PX) * A4_HEIGHT_PT,
   };
 }
 
@@ -348,10 +336,10 @@ export default function ImageToPdfConverter() {
             : await pdfDoc.embedJpg(prepared.bytes);
         const page = pdfDoc.addPage([A4_WIDTH_PT, A4_HEIGHT_PT]);
         page.drawImage(embeddedImage, {
-          x: prepared.offsetX,
-          y: prepared.offsetY,
-          width: prepared.drawWidth,
-          height: prepared.drawHeight,
+          x: 0,
+          y: 0,
+          width: A4_WIDTH_PT,
+          height: A4_HEIGHT_PT,
         });
       }
 
