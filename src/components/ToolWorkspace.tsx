@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import ImageOptimizer from "@/components/ImageOptimizer";
+import ImageToPdfConverter from "@/components/ImageToPdfConverter";
 import PdfToPngConverter from "@/components/PdfToPngConverter";
 import UrlCaptureOptimizer from "@/components/UrlCaptureOptimizer";
 import { ImageCategory } from "@/types/image";
@@ -18,11 +19,12 @@ import {
   Layers,
   Command,
   Camera,
+  Files,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Category = "compressing" | "converter" | "url-capture";
-type ToolMode = ImageCategory | "pdf-to-png" | "webp" | "avif";
+type ToolMode = ImageCategory | "pdf-to-png" | "image-to-pdf" | "webp" | "avif";
 
 const COMPRESSING_MODES: Array<{
   id: ImageCategory;
@@ -57,7 +59,7 @@ const COMPRESSING_MODES: Array<{
 ];
 
 const CONVERTER_MODES: Array<{
-  id: "pdf-to-png" | "webp" | "avif";
+  id: "pdf-to-png" | "image-to-pdf" | "webp" | "avif";
   label: string;
   description: string;
   icon: React.ReactNode;
@@ -67,6 +69,12 @@ const CONVERTER_MODES: Array<{
     label: "PDF → PNG",
     description: "고해상도 이미지 변환",
     icon: <FileType className="w-4 h-4" />,
+  },
+  {
+    id: "image-to-pdf",
+    label: "Image → PDF",
+    description: "순서 기반 A4 PDF 생성",
+    icon: <Files className="w-4 h-4" />,
   },
   {
     id: "webp",
@@ -183,6 +191,8 @@ export default function ToolWorkspace() {
               <ImageOptimizer category={mode as ImageCategory} />
             ) : mode === "pdf-to-png" ? (
               <PdfToPngConverter />
+            ) : mode === "image-to-pdf" ? (
+              <ImageToPdfConverter />
             ) : (
               <ImageOptimizer
                 category="photo"

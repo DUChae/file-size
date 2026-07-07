@@ -1,8 +1,6 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextRequest, NextResponse } from "next/server";
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
-
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as HandleUploadBody;
 
@@ -21,7 +19,6 @@ export async function POST(request: NextRequest) {
             "image/gif",
           ],
           addRandomSuffix: false,
-          maximumSizeInBytes: MAX_FILE_SIZE,
         };
       },
       onUploadCompleted: async () => {},
