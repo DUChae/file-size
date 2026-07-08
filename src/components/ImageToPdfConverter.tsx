@@ -178,6 +178,28 @@ async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> 
   };
 }
 
+async function createPdfBlob(preparedImages: PreparedImage[]) {
+  const pdfDoc = await PDFDocument.create();
+
+  for (const prepared of preparedImages) {
+    const embeddedImage =
+      prepared.mimeType === "image/png"
+        ? await pdfDoc.embedPng(prepared.bytes)
+        : await pdfDoc.embedJpg(prepared.bytes);
+    const page = pdfDoc.addPage([prepared.pageWidth, prepared.pageHeight]);
+    page.drawImage(embeddedImage, {
+      x: 0,
+      y: 0,
+      width: prepared.pageWidth,
+      height: prepared.pageHeight,
+    });
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  const pdfBytesCopy = new Uint8Array(pdfBytes);
+  return new Blob([pdfBytesCopy.buffer], { type: "application/pdf" });
+}
+
 async function trackImagePdfEvent(payload: Record<string, unknown>) {
   try {
     await fetch("/api/events", {
@@ -196,6 +218,7 @@ export default function ImageToPdfConverter() {
   const [error, setError] = useState<string | null>(null);
   const [outputSize, setOutputSize] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const itemsRef = useRef<ImageQueueItem[]>([]);
 
   const isBusy = status === "compressing";
@@ -315,6 +338,7 @@ export default function ImageToPdfConverter() {
     });
     setStatus("idle");
     setOutputSize(null);
+    setActiveItemId(null);
   };
 
   const clearItems = () => {
@@ -323,6 +347,71 @@ export default function ImageToPdfConverter() {
     setStatus("idle");
     setError(null);
     setOutputSize(null);
+    setActiveItemId(null);
+  };
+
+  const handleConvertSingle = async (item: ImageQueueItem) => {
+    if (isBusy) return;
+
+    setStatus("compressing");
+    setActiveItemId(item.id);
+    setError(null);
+    setOutputSize(null);
+
+    await trackImagePdfEvent({
+      type: "pdf_job_started",
+      status: "started",
+      tool: "pdf",
+      mode: "image-to-pdf-single",
+      fileSize: item.size,
+      pageCount: 1,
+    });
+
+    try {
+      const prepared = await prepareImageForPdf(item);
+      setItems((current) =>
+        current.map((currentItem) =>
+          currentItem.id === item.id
+            ? { ...currentItem, compressedSize: prepared.compressedSize }
+            : currentItem,
+        ),
+      );
+
+      const pdfBlob = await createPdfBlob([prepared]);
+      saveAs(pdfBlob, `${sanitizeFilename(item.name)}.pdf`);
+      setOutputSize(pdfBlob.size);
+      setStatus("done");
+
+      await trackImagePdfEvent({
+        type: "pdf_job_success",
+        status: "success",
+        tool: "pdf",
+        mode: "image-to-pdf-single",
+        fileSize: prepared.originalSize,
+        optimizedSize: pdfBlob.size,
+        pageCount: 1,
+      });
+    } catch (conversionError) {
+      const message =
+        conversionError instanceof Error
+          ? conversionError.message
+          : "Image to PDF 변환에 실패했습니다.";
+
+      await trackImagePdfEvent({
+        type: "pdf_job_error",
+        status: "error",
+        tool: "pdf",
+        mode: "image-to-pdf-single",
+        fileSize: item.size,
+        pageCount: 1,
+        error: message,
+      });
+
+      setStatus("error");
+      setError(message);
+    } finally {
+      setActiveItemId(null);
+    }
   };
 
   const handleConvert = async () => {
@@ -330,6 +419,7 @@ export default function ImageToPdfConverter() {
 
     const orderedItems = [...items];
     setStatus("compressing");
+    setActiveItemId(null);
     setError(null);
     setOutputSize(null);
 
@@ -357,25 +447,7 @@ export default function ImageToPdfConverter() {
         );
       }
 
-      const pdfDoc = await PDFDocument.create();
-
-      for (const prepared of preparedImages) {
-        const embeddedImage =
-          prepared.mimeType === "image/png"
-            ? await pdfDoc.embedPng(prepared.bytes)
-            : await pdfDoc.embedJpg(prepared.bytes);
-        const page = pdfDoc.addPage([prepared.pageWidth, prepared.pageHeight]);
-        page.drawImage(embeddedImage, {
-          x: 0,
-          y: 0,
-          width: prepared.pageWidth,
-          height: prepared.pageHeight,
-        });
-      }
-
-      const pdfBytes = await pdfDoc.save();
-      const pdfBytesCopy = new Uint8Array(pdfBytes);
-      const pdfBlob = new Blob([pdfBytesCopy.buffer], { type: "application/pdf" });
+      const pdfBlob = await createPdfBlob(preparedImages);
       const baseName = sanitizeFilename(orderedItems[0]?.name ?? "images");
 
       saveAs(pdfBlob, `${baseName}-merged.pdf`);
@@ -470,7 +542,7 @@ export default function ImageToPdfConverter() {
             ) : (
               <>
                 <FileOutput className="w-5 h-5 mr-3" />
-                PDF 변환
+                전체 PDF 변환
               </>
             )}
           </Button>
@@ -584,7 +656,7 @@ export default function ImageToPdfConverter() {
             items.map((item, index) => (
               <div
                 key={item.id}
-                className="grid grid-cols-[64px_1fr_auto] items-center gap-5 rounded-2xl border border-white/5 bg-white/[0.02] p-4"
+                className="grid grid-cols-[64px_1fr] items-center gap-5 rounded-2xl border border-white/5 bg-white/[0.02] p-4 md:grid-cols-[64px_1fr_auto]"
               >
                 <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/10 bg-black">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -605,7 +677,24 @@ export default function ImageToPdfConverter() {
                     {item.compressedSize ? <span>PDF asset {formatSize(item.compressedSize)}</span> : null}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="col-span-2 flex items-center justify-end gap-2 md:col-span-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void handleConvertSingle(item);
+                    }}
+                    disabled={isBusy}
+                    className="rounded-full border-white/10 bg-white/[0.02] px-3 text-xs font-black text-slate-300 hover:bg-white/5 hover:text-white"
+                    title="Convert this image to PDF"
+                  >
+                    {activeItemId === item.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileOutput className="w-4 h-4" />
+                    )}
+                    PDF
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
