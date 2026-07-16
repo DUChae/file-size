@@ -6,7 +6,7 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
-import { removeImageBackground } from "@/utils/backgroundRemoval";
+import { removeImageBackground, removeBgByColorThreshold, detectIsSignatureOrText } from "@/utils/backgroundRemoval";
 import {
   Download,
   X,
@@ -23,6 +23,7 @@ const CONCURRENCY = 1; // 배경 제거는 CPU 연산이 매우 무거우므로 
 export default function ImageBgRemover() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [removalMode, setRemovalMode] = useState<"auto" | "ai" | "color">("auto");
   const processingRef = useRef<number>(0);
 
   const formatSize = (bytes: number) => {
@@ -55,11 +56,12 @@ export default function ImageBgRemover() {
           webWidth: "",
           webHeight: "",
           bgRemovalProgress: 0,
+          removalMode: removalMode,
         }));
 
       setQueue((prev) => [...prev, ...newItems]);
     },
-    [queue.length],
+    [queue.length, removalMode],
   );
 
   const processQueue = useCallback(async () => {
@@ -80,18 +82,33 @@ export default function ImageBgRemover() {
             ),
           );
 
-          const transparentBlob = await removeImageBackground(
-            nextItem.originalFile,
-            (progress) => {
-              setQueue((q) =>
-                q.map((it) =>
-                  it.id === nextItem.id
-                    ? { ...it, bgRemovalProgress: progress }
-                    : it,
-                ),
-              );
-            },
-          );
+          let transparentBlob: Blob;
+          let actualMode = nextItem.removalMode;
+
+          if (actualMode === "auto") {
+            // 자동 감지: 이미지 분석을 통해 자필 서명/텍스트인지 일반 사진인지 자동 판별합니다.
+            const isSignature = await detectIsSignatureOrText(nextItem.originalFile);
+            actualMode = isSignature ? "color" : "ai";
+          }
+
+          if (actualMode === "color") {
+            // 색상 대비 기반(자필 서명/텍스트) 투명화 처리
+            transparentBlob = await removeBgByColorThreshold(nextItem.originalFile, 200, 240);
+          } else {
+            // AI 모델 기반 배경 제거 처리
+            transparentBlob = await removeImageBackground(
+              nextItem.originalFile,
+              (progress) => {
+                setQueue((q) =>
+                  q.map((it) =>
+                    it.id === nextItem.id
+                      ? { ...it, bgRemovalProgress: progress }
+                      : it,
+                  ),
+                );
+              },
+            );
+          }
 
           // 2단계: 결과 Blob을 압축 전송용 파일 객체로 래핑 (출력은 항상 PNG)
           const originalName = nextItem.originalFile.name;
@@ -188,8 +205,50 @@ export default function ImageBgRemover() {
                 <span className="text-teal-300">BG REMOVER</span> Engine
               </h3>
               <p className="text-base text-slate-400 font-medium leading-relaxed">
-                업로드한 이미지의 배경을 인지하여 자동으로 지워주고 투명(PNG) 이미지로 변환합니다. 브라우저 내장 AI 엔진이 가속 연산을 담당합니다.
+                {removalMode === "auto" && "업로드된 이미지의 특성을 스스로 분석하여 AI 피사체 인식 또는 서명/텍스트 최적화 기법을 자동으로 선택해 배경을 지워줍니다."}
+                {removalMode === "ai" && "업로드한 이미지의 배경을 인지하여 자동으로 지워주고 투명(PNG) 이미지로 변환합니다. 브라우저 내장 AI 엔진이 가속 연산을 담당합니다."}
+                {removalMode === "color" && "서명이나 손글씨 같은 얇은 텍스트에 최적화된 모드입니다. 픽셀 밝기 대비 분석 기법으로 흐릿함이나 뭉개짐 없이 흰색 배경을 완벽하게 날려줍니다."}
               </p>
+            </div>
+            <div className="space-y-4 pt-6 border-t border-white/10">
+              <h4 className="text-xs font-semibold text-slate-500">
+                Removal Method
+              </h4>
+              <div className="grid grid-cols-3 gap-2 p-1.5 bg-black/20 border border-white/10 rounded-2xl">
+                <button
+                  onClick={() => setRemovalMode("auto")}
+                  className={cn(
+                    "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider active:scale-[0.98]",
+                    removalMode === "auto"
+                      ? "bg-white text-black shadow-xl"
+                      : "text-slate-500 hover:text-white",
+                  )}
+                >
+                  자동 감지 (권장)
+                </button>
+                <button
+                  onClick={() => setRemovalMode("ai")}
+                  className={cn(
+                    "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider active:scale-[0.98]",
+                    removalMode === "ai"
+                      ? "bg-white text-black shadow-xl"
+                      : "text-slate-500 hover:text-white",
+                  )}
+                >
+                  AI 피사체 인식
+                </button>
+                <button
+                  onClick={() => setRemovalMode("color")}
+                  className={cn(
+                    "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider active:scale-[0.98]",
+                    removalMode === "color"
+                      ? "bg-white text-black shadow-xl"
+                      : "text-slate-500 hover:text-white",
+                  )}
+                >
+                  서명/텍스트 최적화
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -214,7 +273,9 @@ export default function ImageBgRemover() {
               Technical Insight
             </div>
             <p className="text-sm text-teal-50/60 font-medium leading-relaxed">
-              본 도구는 외부 AI 서버로 이미지를 업로드하지 않고, 사용자의 PC 환경에서 직접 WebAssembly(WASM) 및 가속 모델을 로드하여 배경을 처리합니다. 데이터 유출 우려가 전혀 없는 완전히 안전한 온디바이스(On-device) 모델입니다.
+              {removalMode === "auto" && "자동 감지 모드는 이미지의 배경색 비율과 픽셀 데이터를 미리 가볍게 분석하여 자필 서명 여부를 판정하고 최적의 알고리즘으로 분기하여 실행합니다."}
+              {removalMode === "ai" && "본 도구는 외부 AI 서버로 이미지를 업로드하지 않고, 사용자의 PC 환경에서 직접 WebAssembly(WASM) 및 가속 모델을 로드하여 배경을 처리합니다. 데이터 유출 우려가 전혀 없는 완전히 안전한 온디바이스(On-device) 모델입니다."}
+              {removalMode === "color" && "이 모드는 로컬 그래픽 캔버스 API를 통해 기기 메모리 내에서 픽셀 단위 고속 색채 필터링을 수행합니다. 복잡한 AI 연산을 거치지 않아 속도가 거의 즉각적이며, 얇은 선의 안티앨리어싱 품질을 완벽히 보존합니다."}
             </p>
           </div>
         </div>
@@ -254,10 +315,14 @@ export default function ImageBgRemover() {
           </div>
           <div className="text-center space-y-2">
             <h3 className="text-2xl font-bold text-white tracking-tight">
-              배경을 제거할 파일을 드롭하거나 클릭하여 선택하세요
+              {removalMode === "auto" && "자동으로 분류 및 처리할 파일을 드롭하거나 클릭하세요"}
+              {removalMode === "ai" && "배경을 제거할 파일을 드롭하거나 클릭하여 선택하세요"}
+              {removalMode === "color" && "서명/텍스트 이미지 파일을 드롭하거나 클릭하세요"}
             </h3>
             <p className="text-xs text-slate-500 font-semibold">
-              WASM 모델 다운로드 및 연산 작업은 기기 성능에 따라 다소 시간이 소요될 수 있습니다.
+              {removalMode === "auto" && "서명은 초고속 픽셀 필터링으로, 일반 사진은 AI 엔진 가속 모델로 자동 분기 처리됩니다."}
+              {removalMode === "ai" && "WASM 모델 다운로드 및 연산 작업은 기기 성능에 따라 다소 시간이 소요될 수 있습니다."}
+              {removalMode === "color" && "색상 대비 필터 연산은 매우 빠르고 즉각적으로 처리됩니다."}
             </p>
           </div>
         </div>

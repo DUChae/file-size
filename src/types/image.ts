@@ -26,6 +26,7 @@ export interface QueueItem {
   optimizedUrl?: string;
   optimizedDownloadUrl?: string;
   bgRemovalProgress?: number;
+  removalMode?: "auto" | "ai" | "color";
 }
 
 export interface CompressionRequest {
