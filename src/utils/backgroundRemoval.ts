@@ -29,7 +29,7 @@ export async function removeImageBackground(
 
 /**
  * 이미지의 픽셀 밝기(Luminance) 분포를 동적으로 분석하여 흰색/밝은 계열 배경 영역을 정밀하게 투명화합니다.
- * 조명이 어둡거나 종이 색상이 회색빛인 스마트폰 촬영본 서명에서도 배경을 효과적으로 날려줍니다.
+ * 서명 글씨의 안티앨리어싱 경계면에 흰색 테두리(Halo)가 남는 문제를 방지하기 위해 Color-to-Alpha 기법을 적용합니다.
  * @param imageFile 원본 이미지 파일 또는 블롭
  * @param thresholdStart 투명화 적용을 시작할 밝기 기준값 (생략 시 통계 분석을 통해 동적 계산)
  * @param thresholdEnd 완전히 투명하게 만들 밝기 기준값 (생략 시 통계 분석을 통해 동적 계산)
@@ -82,19 +82,47 @@ export async function removeBgByColorThreshold(
         endVal = Math.max(100, p97 - 2);
       }
 
-      // 픽셀 투명화 연산을 시작합니다.
+      // 1. 자필 서명의 대표 잉크 색상을 동적으로 샘플링하여 추출합니다.
+      let sumR = 0, sumG = 0, sumB = 0, inkCount = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+        
+        // 상대적으로 어두운 영역(글씨 부분)의 평균 색상을 조사합니다.
+        if (luma < 100) {
+          sumR += r;
+          sumG += g;
+          sumB += b;
+          inkCount++;
+        }
+      }
+      
+      const inkR = inkCount > 0 ? Math.round(sumR / inkCount) : 0;
+      const inkG = inkCount > 0 ? Math.round(sumG / inkCount) : 0;
+      const inkB = inkCount > 0 ? Math.round(sumB / inkCount) : 0;
+
+      // 2. Color-to-Alpha 연산을 적용하여 픽셀 변환을 수행합니다.
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         const luma = 0.299 * r + 0.587 * g + 0.114 * b;
 
+        let alpha = 255;
         if (luma >= endVal) {
-          data[i + 3] = 0;
+          alpha = 0;
         } else if (luma > startVal) {
           const ratio = (luma - startVal) / (endVal - startVal);
-          data[i + 3] = Math.round((1 - ratio) * 255);
+          alpha = Math.round((1 - ratio) * 255);
         }
+
+        // 흰색 테두리 흔적을 완전히 없애기 위해 모든 전경 픽셀의 RGB 색상을 잉크 고유 색상으로 매핑합니다.
+        data[i] = inkR;
+        data[i + 1] = inkG;
+        data[i + 2] = inkB;
+        data[i + 3] = alpha;
       }
 
       ctx.putImageData(imageData, 0, 0);
