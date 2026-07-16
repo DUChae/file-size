@@ -93,7 +93,7 @@ export default function ImageBgRemover() {
 
           if (actualMode === "color") {
             // 색상 대비 기반(자필 서명/텍스트) 투명화 처리
-            transparentBlob = await removeBgByColorThreshold(nextItem.originalFile, 200, 240);
+            transparentBlob = await removeBgByColorThreshold(nextItem.originalFile);
           } else {
             // AI 모델 기반 배경 제거 처리
             transparentBlob = await removeImageBackground(

@@ -4,7 +4,9 @@ import { QueueItem } from "@/types/image";
 
 export function downloadSingle(item: QueueItem) {
   if (item.optimizedDownloadUrl && item.optimizedFilename) {
-    saveAs(item.optimizedDownloadUrl, item.optimizedFilename.normalize("NFC"));
+    // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 스트링을 붙여 다운로드합니다.
+    const cacheBustedUrl = item.optimizedDownloadUrl + `?t=${Date.now()}`;
+    saveAs(cacheBustedUrl, item.optimizedFilename.normalize("NFC"));
   }
 }
 
@@ -15,7 +17,9 @@ export async function downloadAllAsZip(items: QueueItem[]) {
 
   for (const item of items) {
     if (item.optimizedUrl && item.optimizedFilename && item.status === "done") {
-      const response = await fetch(item.optimizedUrl);
+      // ZIP 생성 시에도 최신 버전 이미지를 가져오도록 캐시 버스팅을 적용합니다.
+      const cacheBustedUrl = item.optimizedUrl + `?t=${Date.now()}`;
+      const response = await fetch(cacheBustedUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch ${item.optimizedFilename}`);
       }

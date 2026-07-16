@@ -28,16 +28,17 @@ export async function removeImageBackground(
 }
 
 /**
- * 이미지의 픽셀 밝기(Luminance)를 계산하여 흰색 배경 영역을 정밀하게 투명화합니다. (서명 및 캘리그라피 텍스트에 최적화)
+ * 이미지의 픽셀 밝기(Luminance) 분포를 동적으로 분석하여 흰색/밝은 계열 배경 영역을 정밀하게 투명화합니다.
+ * 조명이 어둡거나 종이 색상이 회색빛인 스마트폰 촬영본 서명에서도 배경을 효과적으로 날려줍니다.
  * @param imageFile 원본 이미지 파일 또는 블롭
- * @param thresholdStart 투명화 적용을 시작할 밝기 기준값 (기본값: 200)
- * @param thresholdEnd 완전히 투명하게 만들 밝기 기준값 (기본값: 240)
+ * @param thresholdStart 투명화 적용을 시작할 밝기 기준값 (생략 시 통계 분석을 통해 동적 계산)
+ * @param thresholdEnd 완전히 투명하게 만들 밝기 기준값 (생략 시 통계 분석을 통해 동적 계산)
  * @returns 배경이 투명화 처리된 PNG 이미지 블롭(Blob)
  */
 export async function removeBgByColorThreshold(
   imageFile: File | Blob,
-  thresholdStart: number = 200,
-  thresholdEnd: number = 240
+  thresholdStart?: number,
+  thresholdEnd?: number
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -56,21 +57,42 @@ export async function removeBgByColorThreshold(
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
-      // 픽셀 루프를 돌며 알파 채널을 조절합니다.
+      let startVal = thresholdStart;
+      let endVal = thresholdEnd;
+
+      // 임계값이 지정되지 않았다면 이미지 픽셀의 밝기 통계를 기반으로 동적 탐지합니다.
+      if (startVal === undefined || endVal === undefined) {
+        const lumas: number[] = [];
+        const step = Math.max(1, Math.floor(data.length / 4 / 2500)); // 최대 2500개 샘플링
+        for (let i = 0; i < data.length; i += 4 * step) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+          lumas.push(luma);
+        }
+        lumas.sort((a, b) => a - b);
+        
+        // 서명 이미지 배경 종이는 대개 전체 면적의 75% 이상이므로,
+        // 상위 80% 분위수와 상위 97% 분위수를 밝기 판단의 임계 범위로 잡습니다.
+        const p80 = lumas[Math.floor(lumas.length * 0.80)] || 200;
+        const p97 = lumas[Math.floor(lumas.length * 0.97)] || 240;
+
+        startVal = Math.max(80, p80 - 15);
+        endVal = Math.max(100, p97 - 2);
+      }
+
+      // 픽셀 투명화 연산을 시작합니다.
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        
-        // 인간 시각 특성이 반영된 휘도(Luminance) 공식 적용
         const luma = 0.299 * r + 0.587 * g + 0.114 * b;
 
-        if (luma >= thresholdEnd) {
-          // 배경 기준값 이상으로 밝은 영역은 완전 투명 처리
+        if (luma >= endVal) {
           data[i + 3] = 0;
-        } else if (luma > thresholdStart) {
-          // 경계면의 부드러운 안티앨리어싱 효과를 위해 선형 보간 알파 설정
-          const ratio = (luma - thresholdStart) / (thresholdEnd - thresholdStart);
+        } else if (luma > startVal) {
+          const ratio = (luma - startVal) / (endVal - startVal);
           data[i + 3] = Math.round((1 - ratio) * 255);
         }
       }
@@ -91,7 +113,7 @@ export async function removeBgByColorThreshold(
 }
 
 /**
- * 이미지의 픽셀 밝기 분포를 분석하여 흰색 배경 비율이 높은 자필 서명/텍스트 이미지인지 판별합니다.
+ * 이미지의 픽셀 밝기 및 채도 분포를 분석하여 흰색 계열 배경 비율이 높은 자필 서명/텍스트 이미지인지 판별합니다.
  * @param imageFile 분석할 원본 이미지 파일 또는 블롭
  * @returns 자필 서명/텍스트로 판별되면 true, 일반 사진/덩어리면 false를 반환합니다.
  */
@@ -107,8 +129,7 @@ export async function detectIsSignatureOrText(imageFile: File | Blob): Promise<b
     img.onload = () => {
       URL.revokeObjectURL(img.src);
       const canvas = document.createElement("canvas");
-      // 초고속 처리를 위해 100x100 해상도로 서브샘플링하여 분석을 진행합니다.
-      const sampleSize = 100;
+      const sampleSize = 50;
       canvas.width = sampleSize;
       canvas.height = sampleSize;
       const ctx = canvas.getContext("2d");
@@ -120,23 +141,40 @@ export async function detectIsSignatureOrText(imageFile: File | Blob): Promise<b
       try {
         const imageData = ctx.getImageData(0, 0, sampleSize, sampleSize);
         const data = imageData.data;
-        let whitePixels = 0;
-        const totalPixels = sampleSize * sampleSize;
+        
+        let maxLuma = 0;
+        let minLuma = 255;
+        let sumSaturation = 0;
+        let brightPixels = 0;
+        const total = sampleSize * sampleSize;
 
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          
-          // 각 RGB 채널이 215보다 높은 밝은 영역을 배경으로 간주합니다.
-          if (r > 215 && g > 215 && b > 215) {
-            whitePixels++;
+          const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          if (luma > maxLuma) maxLuma = luma;
+          if (luma < minLuma) minLuma = luma;
+
+          const avg = (r + g + b) / 3;
+          const sat = (Math.abs(r - avg) + Math.abs(g - avg) + Math.abs(b - avg)) / 3;
+          sumSaturation += sat;
+
+          if (luma > 150) {
+            brightPixels++;
           }
         }
 
-        const whiteRatio = whitePixels / totalPixels;
-        // 밝은 배경색 영역이 이미지 면적의 85% 이상을 차지할 경우 서명/텍스트로 인지합니다.
-        resolve(whiteRatio >= 0.85);
+        const avgSat = sumSaturation / total;
+        const brightRatio = brightPixels / total;
+        const contrast = maxLuma - minLuma;
+
+        // 1. 전체 이미지 명암 대비가 확실할 것 (대비 100 이상)
+        // 2. 전체 면적 중 밝은 부분이 주를 이룰 것 (70% 이상)
+        // 3. 색상 성분이 옅을 것 (채도 평균이 25 미만의 무채색 계열)
+        const isSignature = contrast > 100 && brightRatio > 0.70 && avgSat < 25;
+        resolve(isSignature);
       } catch {
         resolve(false);
       }
