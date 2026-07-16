@@ -6,6 +6,7 @@
   "ui": "ui.html",
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": ["*"]
+    "allowedDomains": ["*"],
+    "reasoning": "This plugin loads the image optimization web app hosted on an external server and fetches optimized image blobs to place them back into the Figma canvas."
   }
 }
