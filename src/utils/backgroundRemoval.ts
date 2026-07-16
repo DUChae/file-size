@@ -48,7 +48,7 @@ export async function removeBgByColorThreshold(
       const canvas = document.createElement("canvas");
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { alpha: true });
       if (!ctx) {
         reject(new Error("Canvas 2D 컨텍스트를 활성화할 수 없습니다."));
         return;
@@ -57,11 +57,10 @@ export async function removeBgByColorThreshold(
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
-      let startVal = thresholdStart;
       let endVal = thresholdEnd;
 
       // 임계값이 지정되지 않았다면 이미지 픽셀의 밝기 통계를 기반으로 동적 탐지합니다.
-      if (startVal === undefined || endVal === undefined) {
+      if (endVal === undefined) {
         const lumas: number[] = [];
         const step = Math.max(1, Math.floor(data.length / 4 / 2500)); // 최대 2500개 샘플링
         for (let i = 0; i < data.length; i += 4 * step) {
@@ -73,16 +72,14 @@ export async function removeBgByColorThreshold(
         }
         lumas.sort((a, b) => a - b);
         
-        // 서명 이미지의 획 주변 미세 흰색 광원을 완전히 잘라내기 위해
-        // 60% 및 90% 분위수를 기준으로 삼아 투명화 컷오프를 강력하게 적용합니다.
-        const p60 = lumas[Math.floor(lumas.length * 0.60)] || 200;
+        // 상위 90% 분위수 밝기를 추출합니다.
         const p90 = lumas[Math.floor(lumas.length * 0.90)] || 240;
 
-        startVal = Math.max(100, p60 - 20);
-        endVal = Math.max(130, p90 - 5);
+        // p90 지점보다 15만큼 더 어두운 회색 영역까지 안전하게 컷오프 범위로 잡아 배경 노이즈를 완전 소거합니다.
+        endVal = Math.max(160, p90 - 15);
       }
 
-      // 1. 원본 색감을 무손실 보존하되, 안티앨리어싱 경계면에서 흰색 종이 잔상을 완벽히 지우는 Matte Demultiply 필터를 적용합니다.
+      // 하드 클리핑 필터: 조금이라도 배경의 흰색 성분이 혼합되어 있는 경계면 회색 픽셀들을 물리적으로 완전 배제합니다.
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
@@ -90,31 +87,12 @@ export async function removeBgByColorThreshold(
         const luma = 0.299 * r + 0.587 * g + 0.114 * b;
 
         if (luma >= endVal) {
-          // 완벽한 배경 영역은 완전히 투명화합니다.
+          // 조금이라도 흰색/밝은 회색 기운이 도는 배경 픽셀은 가차 없이 완전 투명(alpha = 0)으로 소멸시킵니다.
           data[i + 3] = 0;
-        } else if (luma <= startVal) {
-          // 글씨 내부 영역은 원본 색상과 불투명도(255)를 100% 무손실 보존합니다.
-          data[i + 3] = 255;
         } else {
-          // 경계면 영역 (startVal < luma < endVal)
-          const ratio = (luma - startVal) / (endVal - startVal);
-          
-          // 외곽에 흰색 테두리 후광이 머무는 것을 완벽히 소거하기 위해, 알파 값에 3.0승 급격 감쇄를 적용합니다.
-          const alphaFactor = Math.pow(1 - ratio, 3.0);
-          const alpha = Math.round(alphaFactor * 255);
-          
-          // 핵심: 흰색 배경 매트 제거 공식 (Matte Demultiply)
-          // NewColor = (OriginalColor - 255 * ratio) / (1 - ratio)
-          // 경계면 픽셀에 혼합된 흰색 종이 광원(255) 성분을 완벽히 감산함으로써, 검정 배경에 올려도 하얗게 빛나는 테두리를 소멸시킵니다.
-          const denom = Math.max(0.01, 1 - ratio);
-          const newR = Math.max(0, Math.min(255, Math.round((r - 255 * ratio) / denom)));
-          const newG = Math.max(0, Math.min(255, Math.round((g - 255 * ratio) / denom)));
-          const newB = Math.max(0, Math.min(255, Math.round((b - 255 * ratio) / denom)));
-
-          data[i] = newR;
-          data[i + 1] = newG;
-          data[i + 2] = newB;
-          data[i + 3] = alpha;
+          // 온전한 검은색/어두운 잉크 글씨 픽셀은 원본 색상 그대로 100% 살리고 완전 불투명(alpha = 255)으로 고정합니다.
+          // 이로써 검은 배경에 올렸을 때 흰색 테두리 후광이 물리적으로 전혀 남지 않게 됩니다.
+          data[i + 3] = 255;
         }
       }
 
