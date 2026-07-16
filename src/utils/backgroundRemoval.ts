@@ -18,6 +18,7 @@ export async function removeImageBackground(
   const { removeBackground } = await import("@imgly/background-removal");
 
   return removeBackground(image, {
+    model: "isnet", // 피그마/상용 서비스 수준의 극도로 섬세하고 정밀한 엣지 검출을 위해 풀 정밀도 IS-Net 딥러닝 모델을 적용합니다.
     progress: (key: string, current: number, total: number) => {
       if (onProgress && total > 0) {
         const percentage = Math.round((current / total) * 100);
@@ -82,7 +83,7 @@ export async function removeBgByColorThreshold(
         endVal = Math.max(150, p97 - 1);
       }
 
-      // 1. 원본 RGB 색상을 100% 무손실 보존한 상태로, 밝기에 따라 알파(투명도) 채널만 조절합니다.
+      // 1. 원본 색감을 무손실 보존하되, 안티앨리어싱 경계면에서 흰색 종이 잔상을 지우는 Matte Demultiply 필터를 적용합니다.
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
@@ -90,17 +91,31 @@ export async function removeBgByColorThreshold(
         const luma = 0.299 * r + 0.587 * g + 0.114 * b;
 
         if (luma >= endVal) {
-          // 배경은 완전 투명화합니다.
+          // 완벽한 배경 영역은 완전히 투명화합니다.
           data[i + 3] = 0;
         } else if (luma <= startVal) {
-          // 글씨 영역은 완전 불투명 상태로 보존합니다.
+          // 글씨 내부 영역은 원본 색상과 불투명도(255)를 100% 무손실 보존합니다.
           data[i + 3] = 255;
         } else {
           // 경계면 영역 (startVal < luma < endVal)
-          // 원본 픽셀의 색상(RGB)에는 단 1%의 치환이나 변형도 가하지 않고 그대로 둔 채, 알파 채널만 밝기에 비례해 자연스럽게 감쇄시킵니다.
           const ratio = (luma - startVal) / (endVal - startVal);
+          
+          // 번짐 방지를 위해 예리한 1.5승 알파 감쇄를 적용합니다.
           const alphaFactor = Math.pow(1 - ratio, 1.5);
-          data[i + 3] = Math.round(alphaFactor * 255);
+          const alpha = Math.round(alphaFactor * 255);
+          
+          // 핵심: 흰색 배경 매트 제거 공식 (Matte Demultiply)
+          // NewColor = (OriginalColor - 255 * ratio) / (1 - ratio)
+          // 경계면 픽셀에 혼합된 흰색 종이 광원(255) 성분을 감산하여 제거함으로써, 검정 배경에 올려도 하얀 테두리가 생기지 않도록 방지합니다.
+          const denom = Math.max(0.01, 1 - ratio);
+          const newR = Math.max(0, Math.min(255, Math.round((r - 255 * ratio) / denom)));
+          const newG = Math.max(0, Math.min(255, Math.round((g - 255 * ratio) / denom)));
+          const newB = Math.max(0, Math.min(255, Math.round((b - 255 * ratio) / denom)));
+
+          data[i] = newR;
+          data[i + 1] = newG;
+          data[i + 2] = newB;
+          data[i + 3] = alpha;
         }
       }
 
