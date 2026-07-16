@@ -72,11 +72,12 @@ export async function removeBgByColorThreshold(
         }
         lumas.sort((a, b) => a - b);
         
-        // 상위 90% 분위수 밝기를 추출합니다.
-        const p90 = lumas[Math.floor(lumas.length * 0.90)] || 240;
+        // 상위 92% 분위수 밝기를 추출하여 배경 판단 기준으로 세웁니다.
+        const p92 = lumas[Math.floor(lumas.length * 0.92)] || 240;
 
-        // p90 지점보다 15만큼 더 어두운 회색 영역까지 안전하게 컷오프 범위로 잡아 배경 노이즈를 완전 소거합니다.
-        endVal = Math.max(160, p90 - 15);
+        // 배경색 노이즈 제거를 위해 분위값보다 약간 어두운 영역(마진 8)부터 무조건 다 털어냅니다.
+        // 어두운 촬영본에서도 배경이 정상 소거되도록 하한선 제약(Math.max)을 완벽히 소거합니다.
+        endVal = p92 - 8;
       }
 
       // 하드 클리핑 필터: 조금이라도 배경의 흰색 성분이 혼합되어 있는 경계면 회색 픽셀들을 물리적으로 완전 배제합니다.
