@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem } from "@/types/image";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
-import { removeBgByColorThreshold } from "@/utils/backgroundRemoval";
+import { removeImageBackground } from "@/utils/backgroundRemoval";
 import {
   Download,
   X,
@@ -80,8 +80,19 @@ export default function ImageBgRemover() {
             ),
           );
 
-          // 2단계: 3.0승 감쇄 컬러 매트 제거 알고리즘 가동 (1ms 내 초고속 완료)
-          const transparentBlob = await removeBgByColorThreshold(nextItem.originalFile);
+          // 2단계: 브라우저 온디바이스 AI 매팅 엔진을 활용하여 배경을 소거합니다.
+          const transparentBlob = await removeImageBackground(
+            nextItem.originalFile,
+            (progress) => {
+              setQueue((q) =>
+                q.map((it) =>
+                  it.id === nextItem.id
+                    ? { ...it, bgRemovalProgress: progress }
+                    : it,
+                ),
+              );
+            },
+          );
 
           // 2단계: 결과 PNG 블롭을 기반으로 즉시 브라우저 로컬 Object URL을 발행하여 완료합니다. (서버 전송 스킵)
           const originalName = nextItem.originalFile.name;
