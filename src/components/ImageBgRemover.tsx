@@ -6,6 +6,7 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem } from "@/types/image";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 import { removeImageBackground } from "@/utils/backgroundRemoval";
+import { isInsideFigma, sendImageToFigma } from "@/utils/figmaBridge";
 import {
   Download,
   X,
@@ -319,14 +320,31 @@ export default function ImageBgRemover() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-center min-w-[48px]">
+                  <div className="flex items-center justify-center gap-2 min-w-[48px]">
                     {item.status === "done" ? (
-                      <button
-                        onClick={() => downloadSingle(item)}
-                        className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black transition-all shadow-lg group-hover:scale-110 active:scale-90"
-                      >
-                        <Download className="w-5 h-5" />
-                      </button>
+                      <>
+                        {isInsideFigma() && (
+                          <button
+                            onClick={async () => {
+                              if (item.optimizedUrl) {
+                                const response = await fetch(item.optimizedUrl);
+                                const blob = await response.blob();
+                                await sendImageToFigma(blob, item.optimizedFilename || "image.png");
+                              }
+                            }}
+                            className="w-12 h-12 rounded-full border border-teal-300/30 bg-teal-300/10 text-teal-300 flex items-center justify-center hover:bg-teal-300 hover:text-black transition-all shadow-lg active:scale-90"
+                            title="Figma에 반영"
+                          >
+                            <Sparkles className="w-5 h-5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => downloadSingle(item)}
+                          className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black transition-all shadow-lg group-hover:scale-110 active:scale-90"
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+                      </>
                     ) : item.status === "queued" ? (
                       <button
                         onClick={() =>
