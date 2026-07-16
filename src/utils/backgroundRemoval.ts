@@ -82,7 +82,7 @@ export async function removeBgByColorThreshold(
         endVal = Math.max(150, p97 - 1);
       }
 
-      // 1. 전경 색상 보존 및 안티앨리어싱 경계 광원 제거 필터를 수행합니다.
+      // 1. 원본 RGB 색상을 100% 무손실 보존한 상태로, 밝기에 따라 알파(투명도) 채널만 조절합니다.
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
@@ -90,25 +90,17 @@ export async function removeBgByColorThreshold(
         const luma = 0.299 * r + 0.587 * g + 0.114 * b;
 
         if (luma >= endVal) {
-          // 완벽한 배경 영역은 즉시 완전히 투명화합니다.
+          // 배경은 완전 투명화합니다.
           data[i + 3] = 0;
         } else if (luma <= startVal) {
-          // 서명 본체(핵심 글씨 영역)는 원본의 진하고 또렷한 색상(RGB)과 불투명도(255)를 무손실 보존하여 회색빛 물빠짐을 원천 방지합니다.
+          // 글씨 영역은 완전 불투명 상태로 보존합니다.
           data[i + 3] = 255;
         } else {
-          // 안티앨리어싱 경계선 영역 (startVal < luma < endVal)
+          // 경계면 영역 (startVal < luma < endVal)
+          // 원본 픽셀의 색상(RGB)에는 단 1%의 치환이나 변형도 가하지 않고 그대로 둔 채, 알파 채널만 밝기에 비례해 자연스럽게 감쇄시킵니다.
           const ratio = (luma - startVal) / (endVal - startVal);
-          
-          // 잉크 획이 부풀어올라 두꺼워지는 번짐을 차단하기 위해 알파 값에 1.5제곱 감쇄를 적용해 예리하게 마감합니다.
           const alphaFactor = Math.pow(1 - ratio, 1.5);
-          const alpha = Math.round(alphaFactor * 255);
-          
-          // 흰색 배경 종이의 잔상이 얹히는 현상을 지우기 위해, 픽셀 내 흰색 광원 성분을 농도 비례 보간(blendFactor)으로 차감하여 자연스럽게 죽여줍니다.
-          const blendFactor = 1 - ratio;
-          data[i] = Math.round(r * blendFactor);
-          data[i + 1] = Math.round(g * blendFactor);
-          data[i + 2] = Math.round(b * blendFactor);
-          data[i + 3] = alpha;
+          data[i + 3] = Math.round(alphaFactor * 255);
         }
       }
 
