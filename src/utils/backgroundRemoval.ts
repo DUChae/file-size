@@ -18,7 +18,6 @@ export async function removeImageBackground(
   const { removeBackground } = await import("@imgly/background-removal");
 
   return removeBackground(image, {
-    model: "isnet", // 피그마/상용 서비스 수준의 극도로 섬세하고 정밀한 엣지 검출을 위해 풀 정밀도 IS-Net 딥러닝 모델을 적용합니다.
     progress: (key: string, current: number, total: number) => {
       if (onProgress && total > 0) {
         const percentage = Math.round((current / total) * 100);
@@ -74,16 +73,16 @@ export async function removeBgByColorThreshold(
         }
         lumas.sort((a, b) => a - b);
         
-        // 서명 이미지 배경 종이는 대개 전체 면적의 75% 이상이므로,
-        // 상위 80% 분위수와 상위 97% 분위수를 밝기 판단의 임계 범위로 잡습니다.
-        const p80 = lumas[Math.floor(lumas.length * 0.80)] || 200;
-        const p97 = lumas[Math.floor(lumas.length * 0.97)] || 240;
+        // 서명 이미지의 획 주변 미세 흰색 광원을 완전히 잘라내기 위해
+        // 60% 및 90% 분위수를 기준으로 삼아 투명화 컷오프를 강력하게 적용합니다.
+        const p60 = lumas[Math.floor(lumas.length * 0.60)] || 200;
+        const p90 = lumas[Math.floor(lumas.length * 0.90)] || 240;
 
-        startVal = Math.max(120, p80 - 10);
-        endVal = Math.max(150, p97 - 1);
+        startVal = Math.max(100, p60 - 20);
+        endVal = Math.max(130, p90 - 5);
       }
 
-      // 1. 원본 색감을 무손실 보존하되, 안티앨리어싱 경계면에서 흰색 종이 잔상을 지우는 Matte Demultiply 필터를 적용합니다.
+      // 1. 원본 색감을 무손실 보존하되, 안티앨리어싱 경계면에서 흰색 종이 잔상을 완벽히 지우는 Matte Demultiply 필터를 적용합니다.
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
@@ -100,13 +99,13 @@ export async function removeBgByColorThreshold(
           // 경계면 영역 (startVal < luma < endVal)
           const ratio = (luma - startVal) / (endVal - startVal);
           
-          // 번짐 방지를 위해 예리한 1.5승 알파 감쇄를 적용합니다.
-          const alphaFactor = Math.pow(1 - ratio, 1.5);
+          // 외곽에 흰색 테두리 후광이 머무는 것을 완벽히 소거하기 위해, 알파 값에 3.0승 급격 감쇄를 적용합니다.
+          const alphaFactor = Math.pow(1 - ratio, 3.0);
           const alpha = Math.round(alphaFactor * 255);
           
           // 핵심: 흰색 배경 매트 제거 공식 (Matte Demultiply)
           // NewColor = (OriginalColor - 255 * ratio) / (1 - ratio)
-          // 경계면 픽셀에 혼합된 흰색 종이 광원(255) 성분을 감산하여 제거함으로써, 검정 배경에 올려도 하얀 테두리가 생기지 않도록 방지합니다.
+          // 경계면 픽셀에 혼합된 흰색 종이 광원(255) 성분을 완벽히 감산함으로써, 검정 배경에 올려도 하얗게 빛나는 테두리를 소멸시킵니다.
           const denom = Math.max(0.01, 1 - ratio);
           const newR = Math.max(0, Math.min(255, Math.round((r - 255 * ratio) / denom)));
           const newG = Math.max(0, Math.min(255, Math.round((g - 255 * ratio) / denom)));

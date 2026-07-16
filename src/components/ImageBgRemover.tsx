@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem } from "@/types/image";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
-import { removeImageBackground } from "@/utils/backgroundRemoval";
+import { removeImageBackground, removeBgByColorThreshold, detectIsSignatureOrText } from "@/utils/backgroundRemoval";
 import {
   Download,
   X,
@@ -80,19 +80,28 @@ export default function ImageBgRemover() {
             ),
           );
 
-          // 2단계: 피그마/상용 서비스 수준의 고정밀 배경 제거를 위해 100% 온디바이스 AI 매팅 엔진을 적용합니다.
-          const transparentBlob = await removeImageBackground(
-            nextItem.originalFile,
-            (progress) => {
-              setQueue((q) =>
-                q.map((it) =>
-                  it.id === nextItem.id
-                    ? { ...it, bgRemovalProgress: progress }
-                    : it,
-                ),
-              );
-            },
-          );
+          // 자동 감지: 자필 서명 이미지 여부를 판별합니다.
+          const isSignature = await detectIsSignatureOrText(nextItem.originalFile);
+          
+          let transparentBlob: Blob;
+          if (isSignature) {
+            // 서명/텍스트 최적화: 초고속 픽셀 필터 및 3.0승 감쇄 컬러 매트 제거 알고리즘 가동 (1ms 소요)
+            transparentBlob = await removeBgByColorThreshold(nextItem.originalFile);
+          } else {
+            // 일반 이미지: WASM AI 피사체 인식 가동
+            transparentBlob = await removeImageBackground(
+              nextItem.originalFile,
+              (progress) => {
+                setQueue((q) =>
+                  q.map((it) =>
+                    it.id === nextItem.id
+                      ? { ...it, bgRemovalProgress: progress }
+                      : it,
+                  ),
+                );
+              },
+            );
+          }
 
           // 2단계: 결과 PNG 블롭을 기반으로 즉시 브라우저 로컬 Object URL을 발행하여 완료합니다. (서버 전송 스킵)
           const originalName = nextItem.originalFile.name;
