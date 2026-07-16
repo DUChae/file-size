@@ -78,51 +78,38 @@ export async function removeBgByColorThreshold(
         const p80 = lumas[Math.floor(lumas.length * 0.80)] || 200;
         const p97 = lumas[Math.floor(lumas.length * 0.97)] || 240;
 
-        startVal = Math.max(80, p80 - 15);
-        endVal = Math.max(100, p97 - 2);
+        startVal = Math.max(120, p80 - 10);
+        endVal = Math.max(150, p97 - 1);
       }
 
-      // 1. 자필 서명의 대표 잉크 색상을 동적으로 샘플링하여 추출합니다.
-      let sumR = 0, sumG = 0, sumB = 0, inkCount = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-        
-        // 상대적으로 어두운 영역(글씨 부분)의 평균 색상을 조사합니다.
-        if (luma < 100) {
-          sumR += r;
-          sumG += g;
-          sumB += b;
-          inkCount++;
-        }
-      }
-      
-      const inkR = inkCount > 0 ? Math.round(sumR / inkCount) : 0;
-      const inkG = inkCount > 0 ? Math.round(sumG / inkCount) : 0;
-      const inkB = inkCount > 0 ? Math.round(sumB / inkCount) : 0;
-
-      // 2. Color-to-Alpha 연산을 적용하여 픽셀 변환을 수행합니다.
+      // 1. 전경 색상 보존 및 안티앨리어싱 경계 광원 제거 필터를 수행합니다.
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         const luma = 0.299 * r + 0.587 * g + 0.114 * b;
 
-        let alpha = 255;
         if (luma >= endVal) {
-          alpha = 0;
-        } else if (luma > startVal) {
+          // 완벽한 배경 영역은 즉시 완전히 투명화합니다.
+          data[i + 3] = 0;
+        } else if (luma <= startVal) {
+          // 서명 본체(핵심 글씨 영역)는 원본의 진하고 또렷한 색상(RGB)과 불투명도(255)를 무손실 보존하여 회색빛 물빠짐을 원천 방지합니다.
+          data[i + 3] = 255;
+        } else {
+          // 안티앨리어싱 경계선 영역 (startVal < luma < endVal)
           const ratio = (luma - startVal) / (endVal - startVal);
-          alpha = Math.round((1 - ratio) * 255);
+          
+          // 잉크 획이 부풀어올라 두꺼워지는 번짐을 차단하기 위해 알파 값에 1.5제곱 감쇄를 적용해 예리하게 마감합니다.
+          const alphaFactor = Math.pow(1 - ratio, 1.5);
+          const alpha = Math.round(alphaFactor * 255);
+          
+          // 흰색 배경 종이의 잔상이 얹히는 현상을 지우기 위해, 픽셀 내 흰색 광원 성분을 농도 비례 보간(blendFactor)으로 차감하여 자연스럽게 죽여줍니다.
+          const blendFactor = 1 - ratio;
+          data[i] = Math.round(r * blendFactor);
+          data[i + 1] = Math.round(g * blendFactor);
+          data[i + 2] = Math.round(b * blendFactor);
+          data[i + 3] = alpha;
         }
-
-        // 흰색 테두리 흔적을 완전히 없애기 위해 모든 전경 픽셀의 RGB 색상을 잉크 고유 색상으로 매핑합니다.
-        data[i] = inkR;
-        data[i + 1] = inkG;
-        data[i + 2] = inkB;
-        data[i + 3] = alpha;
       }
 
       ctx.putImageData(imageData, 0, 0);
