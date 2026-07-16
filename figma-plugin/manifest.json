@@ -1,8 +1,9 @@
 {
   "name": "Image Optimizer & BG Remover",
-  "id": "image-optimizer-bg-remover-local",
+  "id": "1659507828345295585",
   "api": "1.0.0",
   "main": "code.js",
+  "documentAccess": "dynamic-page",
   "ui": "ui.html",
   "editorType": ["figma"],
   "networkAccess": {
