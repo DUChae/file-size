@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem } from "@/types/image";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
-import { removeImageBackground, removeBgByColorThreshold, detectIsSignatureOrText } from "@/utils/backgroundRemoval";
+import { removeBgByColorThreshold } from "@/utils/backgroundRemoval";
 import {
   Download,
   X,
@@ -80,28 +80,8 @@ export default function ImageBgRemover() {
             ),
           );
 
-          // 자동 감지: 자필 서명 이미지 여부를 판별합니다.
-          const isSignature = await detectIsSignatureOrText(nextItem.originalFile);
-          
-          let transparentBlob: Blob;
-          if (isSignature) {
-            // 서명/텍스트 최적화: 초고속 픽셀 필터 및 3.0승 감쇄 컬러 매트 제거 알고리즘 가동 (1ms 소요)
-            transparentBlob = await removeBgByColorThreshold(nextItem.originalFile);
-          } else {
-            // 일반 이미지: WASM AI 피사체 인식 가동
-            transparentBlob = await removeImageBackground(
-              nextItem.originalFile,
-              (progress) => {
-                setQueue((q) =>
-                  q.map((it) =>
-                    it.id === nextItem.id
-                      ? { ...it, bgRemovalProgress: progress }
-                      : it,
-                  ),
-                );
-              },
-            );
-          }
+          // 2단계: 3.0승 감쇄 컬러 매트 제거 알고리즘 가동 (1ms 내 초고속 완료)
+          const transparentBlob = await removeBgByColorThreshold(nextItem.originalFile);
 
           // 2단계: 결과 PNG 블롭을 기반으로 즉시 브라우저 로컬 Object URL을 발행하여 완료합니다. (서버 전송 스킵)
           const originalName = nextItem.originalFile.name;
