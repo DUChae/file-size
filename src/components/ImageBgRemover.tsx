@@ -1,46 +1,29 @@
+"use client";
+
+// 클라이언트 측에서 이미지 배경을 지운 후 최적화 압축을 연계하여 처리하는 컴포넌트
+
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import {
-  QueueItem,
-  QueueStatus,
-  ImageCategory,
-  OutputFormat,
-} from "@/types/image";
+import { QueueItem } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
+import { removeImageBackground } from "@/utils/backgroundRemoval";
 import {
-  Upload,
   Download,
   X,
   Loader2,
   Info,
   Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAX_FILES = 10;
-const CONCURRENCY = 2;
+const CONCURRENCY = 1; // 배경 제거는 CPU 연산이 매우 무거우므로 동시성 제한을 1로 설정하여 메인 스레드 병목을 예방합니다.
 
-export default function ImageOptimizer({
-  category,
-  forcedFormat,
-}: {
-  category: ImageCategory;
-  forcedFormat?: "webp" | "avif";
-}) {
+export default function ImageBgRemover() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [globalFormat, setGlobalFormat] = useState<OutputFormat>(
-    forcedFormat || "original",
-  );
-  const [globalWebWidth, setGlobalWebWidth] = useState("");
-  const [globalWebHeight, setGlobalWebHeight] = useState("");
   const processingRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (forcedFormat) {
-      setGlobalFormat(forcedFormat);
-    }
-  }, [forcedFormat]);
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return "0 B";
@@ -58,31 +41,25 @@ export default function ImageOptimizer({
       const newItems: QueueItem[] = fileArray
         .filter(
           (f) =>
-            ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"].includes(
+            ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
               f.type,
-            ) || f.name.toLowerCase().endsWith(".avif") || f.name.toLowerCase().endsWith(".gif"),
+            ),
         )
         .map((file) => ({
           id: Math.random().toString(36).substring(2, 9),
           originalFile: file,
           originalSize: file.size,
           status: "queued",
-          category: category,
-          targetFormat: forcedFormat || globalFormat,
-          webWidth: globalWebWidth,
-          webHeight: globalWebHeight,
+          category: "screenshot", // 배경 제거 후 투명 PNG는 엣지 보존 알고리즘이 포함된 screenshot 옵션으로 압축하여 최상의 텍스트/경계면 퀄리티를 얻습니다.
+          targetFormat: "png",    // 배경의 투명도 유지를 위해 출력 포맷은 항상 PNG로 고정합니다.
+          webWidth: "",
+          webHeight: "",
+          bgRemovalProgress: 0,
         }));
 
       setQueue((prev) => [...prev, ...newItems]);
     },
-    [
-      queue.length,
-      category,
-      globalFormat,
-      globalWebWidth,
-      globalWebHeight,
-      forcedFormat,
-    ],
+    [queue.length],
   );
 
   const processQueue = useCallback(async () => {
@@ -91,21 +68,57 @@ export default function ImageOptimizer({
       const nextItem = prev.find((i) => i.status === "queued");
       if (!nextItem || processingRef.current >= CONCURRENCY) return prev;
       processingRef.current += 1;
+
       (async () => {
         try {
+          // 1단계: 브라우저 WASM 기반 배경 제거 실행
+          setQueue((q) =>
+            q.map((it) =>
+              it.id === nextItem.id
+                ? { ...it, status: "removing-bg", bgRemovalProgress: 0 }
+                : it,
+            ),
+          );
+
+          const transparentBlob = await removeImageBackground(
+            nextItem.originalFile,
+            (progress) => {
+              setQueue((q) =>
+                q.map((it) =>
+                  it.id === nextItem.id
+                    ? { ...it, bgRemovalProgress: progress }
+                    : it,
+                ),
+              );
+            },
+          );
+
+          // 2단계: 결과 Blob을 압축 전송용 파일 객체로 래핑 (출력은 항상 PNG)
+          const originalName = nextItem.originalFile.name;
+          const extIndex = originalName.lastIndexOf(".");
+          const nameWithoutExt = extIndex !== -1 ? originalName.substring(0, extIndex) : originalName;
+          const transparentFile = new File(
+            [transparentBlob],
+            `${nameWithoutExt}.png`,
+            { type: "image/png" },
+          );
+
+          // 3단계: Vercel Blob 업로드 및 Sharp PNG 고압축 연계
           setQueue((q) =>
             q.map((it) =>
               it.id === nextItem.id ? { ...it, status: "compressing" } : it,
             ),
           );
+
           const res = await compressImage(
-            nextItem.originalFile,
+            transparentFile,
             nextItem.id,
-            nextItem.category,
-            nextItem.targetFormat,
-            nextItem.webWidth,
-            nextItem.webHeight,
+            "screenshot",
+            "png",
+            "",
+            "",
           );
+
           setQueue((q) =>
             q.map((it) =>
               it.id === nextItem.id
@@ -117,8 +130,8 @@ export default function ImageOptimizer({
                     optimizedDownloadUrl: res.optimizedDownloadUrl,
                     optimizedSize: res.optimizedSize,
                     reductionRate:
-                      ((res.originalSize - res.optimizedSize) /
-                        res.originalSize) *
+                      ((nextItem.originalSize - res.optimizedSize) /
+                        nextItem.originalSize) *
                       100,
                   }
                 : it,
@@ -141,8 +154,9 @@ export default function ImageOptimizer({
           processQueue();
         }
       })();
+
       return prev.map((it) =>
-        it.id === nextItem.id ? { ...it, status: "uploading" } : it,
+        it.id === nextItem.id ? { ...it, status: "removing-bg" } : it,
       );
     });
   }, []);
@@ -151,8 +165,9 @@ export default function ImageOptimizer({
     if (
       queue.some((i) => i.status === "queued") &&
       processingRef.current < CONCURRENCY
-    )
+    ) {
       processQueue();
+    }
   }, [queue, processQueue]);
 
   const isAllDone =
@@ -170,92 +185,27 @@ export default function ImageOptimizer({
             </h4>
             <div className="space-y-4">
               <h3 className="text-3xl font-black tracking-ultra-tight text-white flex items-center gap-4">
-                {forcedFormat ? (
-                  <>
-                    <span className="text-teal-300">
-                      {forcedFormat.toUpperCase()}
-                    </span>{" "}
-                    Converter
-                  </>
-                ) : (
-                  <>
-                    {category === "screenshot" && "Screenshot Engine"}
-                    {category === "photo" && "Photography Engine"}
-                    {category === "web" && "Web Optimization"}
-                    {category === "high-quality" && "Lossless Master"}
-                  </>
-                )}
+                <span className="text-teal-300">BG REMOVER</span> Engine
               </h3>
               <p className="text-base text-slate-400 font-medium leading-relaxed">
-                {forcedFormat ? (
-                  `${forcedFormat.toUpperCase()} 인코딩을 위해 최적화된 고성능 연산 모델을 적용합니다.`
-                ) : (
-                  <>
-                    {category === "screenshot" &&
-                      "정밀한 엣지 보존 알고리즘으로 텍스트 가독성을 최상으로 유지하며 압축합니다."}
-                    {category === "photo" &&
-                      "지능형 질감 분석을 통해 자연스러운 색조와 세부 디테일을 완벽하게 보존합니다."}
-                    {category === "web" &&
-                      "현대적 웹 성능 지표를 고려한 리사이징과 화질 최적화로 로딩 속도를 혁신합니다."}
-                    {category === "high-quality" &&
-                      "데이터 무결성을 보장하는 무손실 압축으로 원본의 품질을 그대로 유지합니다."}
-                  </>
-                )}
+                업로드한 이미지의 배경을 인지하여 자동으로 지워주고 투명(PNG) 이미지로 변환합니다. 브라우저 내장 AI 엔진이 가속 연산을 담당합니다.
               </p>
             </div>
           </div>
-
-          {category === "web" && (
-            <div className="space-y-6 pt-6 border-t border-white/10">
-              <h4 className="text-xs font-semibold text-slate-500">
-                Output Dimensions
-              </h4>
-              <div className="flex items-center gap-6 bg-black/20 border border-white/10 rounded-2xl p-1.5 px-4">
-                <input
-                  value={globalWebWidth}
-                  onChange={(event) =>
-                    setGlobalWebWidth(event.target.value.replace(/[^\d]/g, ""))
-                  }
-                  placeholder="Width"
-                  className="w-full bg-transparent py-4 text-sm font-bold text-white outline-none placeholder:text-slate-700"
-                />
-                <span className="text-xs font-black text-slate-700">X</span>
-                <input
-                  value={globalWebHeight}
-                  onChange={(event) =>
-                    setGlobalWebHeight(event.target.value.replace(/[^\d]/g, ""))
-                  }
-                  placeholder="Height"
-                  className="w-full bg-transparent py-4 text-sm font-bold text-white outline-none placeholder:text-slate-700 text-right"
-                />
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="space-y-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6 md:p-8 backdrop-blur-xl">
           <div className="space-y-6">
             <h4 className="text-xs font-semibold text-slate-500">
-              Export Format
+              Export Format Info
             </h4>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 p-1.5 bg-black/20 border border-white/10 rounded-2xl">
-              {(["original", "png", "jpeg", "webp", "avif", "gif"] as const).map(
-                (fmt) => (
-                  <button
-                    key={fmt}
-                    onClick={() => !forcedFormat && setGlobalFormat(fmt)}
-                    disabled={!!forcedFormat}
-                    className={cn(
-                      "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider active:scale-[0.98]",
-                      globalFormat === fmt
-                        ? "bg-white text-black shadow-xl"
-                        : "text-slate-500 hover:text-white disabled:opacity-20",
-                    )}
-                  >
-                    {fmt === "original" ? "ORIG" : fmt.toUpperCase()}
-                  </button>
-                ),
-              )}
+            <div className="flex items-center gap-4 bg-black/20 border border-white/10 rounded-2xl p-4">
+              <span className="bg-white text-black text-xs font-black px-4 py-2.5 rounded-xl">
+                PNG (FORCED)
+              </span>
+              <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                배경의 투명 알파 채널을 완벽하게 보존해야 하므로 최종 결과물은 항상 PNG 포맷으로 강제 인코딩됩니다.
+              </p>
             </div>
           </div>
           <div className="bg-teal-300/[0.045] border border-teal-300/10 rounded-2xl p-6">
@@ -264,18 +214,7 @@ export default function ImageOptimizer({
               Technical Insight
             </div>
             <p className="text-sm text-teal-50/60 font-medium leading-relaxed">
-              {globalFormat === "original" &&
-                "원본 인코딩 프로토콜을 계승하며 메타데이터 정제와 고효율 블록 압축을 동시에 수행합니다."}
-              {globalFormat === "png" &&
-                "알파 채널의 무결성을 보존하고 8비트/24비트 가변 샘플링으로 최적의 용량을 도출합니다."}
-              {globalFormat === "jpeg" &&
-                "크로마 서브샘플링 제어를 통해 인간의 시각적 한계 내에서 최대의 압축 효율을 달성합니다."}
-              {globalFormat === "webp" &&
-                "차세대 예측 인코딩 기술을 활용하여 JPEG 대비 시각적 품질 저하 없이 현격한 용량 감소를 제공합니다."}
-              {globalFormat === "avif" &&
-                "최신 AV1 비디오 코덱 기반 기술로 현존하는 이미지 포맷 중 가장 압축 효율이 뛰어나며 광범위한 색역을 지원합니다."}
-              {globalFormat === "gif" &&
-                "프레임 간 차분 압축 알고리즘을 사용하며, 애니메이션 정보 유실 없이 파일 크기를 최적화합니다."}
+              본 도구는 외부 AI 서버로 이미지를 업로드하지 않고, 사용자의 PC 환경에서 직접 WebAssembly(WASM) 및 가속 모델을 로드하여 배경을 처리합니다. 데이터 유출 우려가 전혀 없는 완전히 안전한 온디바이스(On-device) 모델입니다.
             </p>
           </div>
         </div>
@@ -305,20 +244,20 @@ export default function ImageOptimizer({
           id="fileInput"
           type="file"
           multiple
-          accept=".png,.jpg,.jpeg,.webp,.avif"
+          accept=".png,.jpg,.jpeg,.webp"
           className="hidden"
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
         />
         <div className="flex flex-col items-center space-y-8">
           <div className="w-16 h-16 bg-white text-black rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform shadow-2xl">
-            <Upload className="w-7 h-7" />
+            <Sparkles className="w-7 h-7" />
           </div>
           <div className="text-center space-y-2">
             <h3 className="text-2xl font-bold text-white tracking-tight">
-              작업을 시작하려면 파일을 드롭하세요
+              배경을 제거할 파일을 드롭하거나 클릭하여 선택하세요
             </h3>
             <p className="text-xs text-slate-500 font-semibold">
-              Large uploads supported through direct Blob upload
+              WASM 모델 다운로드 및 연산 작업은 기기 성능에 따라 다소 시간이 소요될 수 있습니다.
             </p>
           </div>
         </div>
@@ -330,7 +269,7 @@ export default function ImageOptimizer({
           <div className="flex justify-between items-center px-6">
             <div className="flex items-center gap-6">
               <h2 className="text-base font-black text-white">
-                Processing Queue
+                Background Removal Queue
               </h2>
               <span className="text-[10px] font-black bg-white/5 text-slate-400 px-3 py-1.5 rounded-full border border-white/10">
                 {queue.length} UNITS
@@ -372,7 +311,7 @@ export default function ImageOptimizer({
                         {item.originalFile.name}
                       </span>
                       <div className="flex items-center gap-3">
-                        <StatusBadge status={item.status} />
+                        <StatusBadge item={item} />
                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
                           {formatSize(item.originalSize)}
                         </span>
@@ -382,7 +321,7 @@ export default function ImageOptimizer({
 
                   <div className="hidden md:flex flex-col items-end gap-2 min-w-[140px] pr-4">
                     <div className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
-                      Storage Efficiency
+                      Total Reduction
                     </div>
                     <div
                       className={cn(
@@ -429,29 +368,29 @@ export default function ImageOptimizer({
   );
 }
 
-function StatusBadge({ status }: { status: QueueStatus }) {
-  const labels: Record<QueueStatus, string> = {
+function StatusBadge({ item }: { item: QueueItem }) {
+  const labels = {
     queued: "Queued",
-    "removing-bg": "Removing BG",
+    "removing-bg": `Removing BG (${item.bgRemovalProgress || 0}%)`,
     uploading: "Uploading",
     compressing: "Processing",
-    done: "Optimized",
+    done: "Completed",
     error: "Failed",
   };
   return (
     <span
       className={cn(
         "text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded",
-        status === "done"
+        item.status === "done"
           ? "text-green-500 bg-green-500/10"
-          : status === "error"
+          : item.status === "error"
             ? "text-red-500 bg-red-500/10"
-            : status === "compressing" || status === "removing-bg"
+            : item.status === "removing-bg" || item.status === "compressing"
               ? "text-teal-300 bg-teal-300/10 animate-pulse"
               : "text-slate-600 bg-white/5",
       )}
     >
-      {labels[status]}
+      {labels[item.status]}
     </span>
   );
 }

@@ -1,4 +1,10 @@
-export type QueueStatus = "queued" | "uploading" | "compressing" | "done" | "error";
+export type QueueStatus =
+  | "queued"
+  | "removing-bg"
+  | "uploading"
+  | "compressing"
+  | "done"
+  | "error";
 
 export type ImageCategory = "screenshot" | "photo" | "web" | "high-quality";
 
@@ -19,6 +25,7 @@ export interface QueueItem {
   optimizedFilename?: string;
   optimizedUrl?: string;
   optimizedDownloadUrl?: string;
+  bgRemovalProgress?: number;
 }
 
 export interface CompressionRequest {

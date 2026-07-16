@@ -5,6 +5,7 @@ import ImageOptimizer from "@/components/ImageOptimizer";
 import ImageToPdfConverter from "@/components/ImageToPdfConverter";
 import PdfToPngConverter from "@/components/PdfToPngConverter";
 import UrlCaptureOptimizer from "@/components/UrlCaptureOptimizer";
+import ImageBgRemover from "@/components/ImageBgRemover";
 import { ImageCategory } from "@/types/image";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -20,10 +21,11 @@ import {
   Command,
   Camera,
   Files,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Category = "compressing" | "converter" | "url-capture";
+type Category = "compressing" | "converter" | "url-capture" | "bg-removal";
 type ToolMode = ImageCategory | "pdf-to-png" | "image-to-pdf" | "webp" | "avif";
 
 const COMPRESSING_MODES: Array<{
@@ -101,6 +103,8 @@ export default function ToolWorkspace() {
       setMode("screenshot");
     } else if (cat === "converter") {
       setMode("pdf-to-png");
+    } else if (cat === "bg-removal") {
+      setMode("screenshot");
     }
   };
 
@@ -158,13 +162,20 @@ export default function ToolWorkspace() {
               <Camera className="w-4 h-4 mr-2" />
               웹페이지 캡처
             </TabsTrigger>
+            <TabsTrigger
+              value="bg-removal"
+              className="rounded-xl px-6 text-sm font-bold text-slate-400 data-[state=active]:bg-white data-[state=active]:text-black transition-all"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              배경 제거
+            </TabsTrigger>
           </TabsList>
         </div>
 
         {/* Command Center Layout */}
         <div className="grid grid-cols-1 gap-1 border-t border-white/10 pt-10">
           {/* Sub-mode Selector - Minimalist Pill Buttons */}
-          {category !== "url-capture" && (
+          {category !== "url-capture" && category !== "bg-removal" && (
             <div className="flex flex-wrap gap-3 mb-14">
               {(category === "compressing"
                 ? COMPRESSING_MODES
@@ -196,6 +207,8 @@ export default function ToolWorkspace() {
           <div className="relative min-h-[500px]">
             {category === "url-capture" ? (
               <UrlCaptureOptimizer />
+            ) : category === "bg-removal" ? (
+              <ImageBgRemover />
             ) : category === "compressing" ? (
               <ImageOptimizer category={mode as ImageCategory} />
             ) : mode === "pdf-to-png" ? (
