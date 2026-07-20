@@ -6,7 +6,11 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem } from "@/types/image";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 import { removeImageBackground } from "@/utils/backgroundRemoval";
-import { isInsideFigma, sendImageToFigma } from "@/utils/figmaBridge";
+import {
+  dropImageInFigma,
+  isInsideFigma,
+  sendImageToFigma,
+} from "@/utils/figmaBridge";
 import {
   Download,
   X,
@@ -283,7 +287,25 @@ export default function ImageBgRemover() {
               {queue.map((item) => (
                 <div
                   key={item.id}
-                  className="p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors"
+                  draggable={isInsideFigma() && item.status === "done"}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "copy";
+                    event.dataTransfer.setData("text/plain", item.originalFile.name);
+                  }}
+                  onDragEnd={(event) => {
+                    if (!item.optimizedUrl || !event.view) return;
+
+                    void dropImageInFigma(
+                      item.optimizedUrl,
+                      item.optimizedFilename || "image.png",
+                      event.clientX,
+                      event.clientY,
+                    );
+                  }}
+                  className={cn(
+                    "p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors",
+                    isInsideFigma() && item.status === "done" && "cursor-grab active:cursor-grabbing",
+                  )}
                 >
                   <div className="flex-1 min-w-0 flex items-center gap-8">
                     <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 shadow-inner group-hover:border-white/20 transition-colors">

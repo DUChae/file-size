@@ -74,3 +74,39 @@ figma.ui.onmessage = async (msg) => {
     }
   }
 };
+
+// 큐 결과물을 캔버스로 드롭하면 해당 좌표에 새 이미지 레이어를 추가합니다.
+figma.on("drop", (event) => {
+  const file = event.files[0];
+  if (!file || !file.type.startsWith("image/")) return true;
+
+  void (async () => {
+    try {
+      const image = figma.createImage(await file.getBytesAsync());
+      const size = await image.getSizeAsync();
+      const width = 400;
+      const rect = figma.createRectangle();
+
+      rect.resize(width, width * (size.height / size.width));
+      rect.name = file.name;
+      rect.fills = [
+        {
+          type: "IMAGE",
+          imageHash: image.hash,
+          scaleMode: "FILL",
+        },
+      ];
+      rect.x = event.absoluteX - rect.width / 2;
+      rect.y = event.absoluteY - rect.height / 2;
+
+      figma.currentPage.appendChild(rect);
+      figma.currentPage.selection = [rect];
+      figma.notify("드롭한 위치에 최적화 이미지를 추가했습니다.");
+    } catch (error) {
+      console.error("Figma image drop failed:", error);
+      figma.notify("드롭한 이미지를 추가하는 도중 오류가 발생했습니다.", { error: true });
+    }
+  })();
+
+  return false;
+});

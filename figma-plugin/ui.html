@@ -37,6 +37,23 @@
 
       // 2. Iframe 내부 웹앱 -> 피그마 메인 스레드(code.js)로 메세지 중계
       window.addEventListener("message", (event) => {
+        const drop = event.data.pluginDrop;
+        if (drop) {
+          // 내부 웹앱의 좌표는 중계 iframe을 기준으로 하므로, UI 내부 위치를 더해 Figma에 전달합니다.
+          const bounds = iframe.getBoundingClientRect();
+          parent.postMessage(
+            {
+              pluginDrop: {
+                ...drop,
+                clientX: drop.clientX + bounds.left,
+                clientY: drop.clientY + bounds.top,
+              },
+            },
+            "*",
+          );
+          return;
+        }
+
         // 보안을 위한 출처 검증이 필요할 경우 추가할 수 있습니다.
         const message = event.data.pluginMessage;
         if (message) {

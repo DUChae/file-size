@@ -32,3 +32,37 @@ export async function sendImageToFigma(blob: Blob, filename: string): Promise<vo
     "*"
   );
 }
+
+/**
+ * 최적화 완료 이미지를 Figma 캔버스 드롭 이벤트로 전달합니다.
+ * @param url 최적화 결과 이미지의 접근 가능한 URL
+ * @param filename 생성할 Figma 노드의 파일명
+ * @param clientX 드래그가 끝난 지점의 X 좌표
+ * @param clientY 드래그가 끝난 지점의 Y 좌표
+ */
+export async function dropImageInFigma(
+  url: string,
+  filename: string,
+  clientX: number,
+  clientY: number,
+): Promise<void> {
+  if (!isInsideFigma()) return;
+
+  const response = await fetch(url);
+  const blob = await response.blob();
+  const file = new File([blob], filename, {
+    type: blob.type || "image/png",
+  });
+
+  // ui.html 중계기가 pluginDrop 메시지를 Figma 캔버스 드롭 이벤트로 전달합니다.
+  window.parent.postMessage(
+    {
+      pluginDrop: {
+        clientX,
+        clientY,
+        files: [file],
+      },
+    },
+    "*",
+  );
+}
