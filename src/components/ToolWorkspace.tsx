@@ -60,7 +60,7 @@ const COMPRESSING_MODES: Array<{
     id: "screenshot",
     label: "스크린샷",
     description: "텍스트 경계선 고압축",
-    qualityBadge: "Quality 75",
+    qualityBadge: "Quality 80",
     icon: <Layout className="w-4 h-4" />,
   },
 ];

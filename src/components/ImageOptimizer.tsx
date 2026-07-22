@@ -214,25 +214,25 @@ export default function ImageOptimizer({
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    예상 화질 등급
+                    화질 목표 (Target Quality)
                   </span>
                   <div className="text-sm font-extrabold text-teal-300">
                     {category === "high-quality" && "최상급 (Quality 95)"}
                     {category === "photo" && "고화질 (Quality 90)"}
                     {category === "web" && "권장 표준 (Quality 82)"}
-                    {category === "screenshot" && "고압축 (Quality 75)"}
+                    {category === "screenshot" && "고압축 (Quality 80)"}
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    예상 용량 절감
+                    실제 측정 압축률 (Benchmark)
                   </span>
                   <div className="text-sm font-extrabold text-white">
-                    {category === "high-quality" && "약 10% ~ 30%"}
-                    {category === "photo" && "약 30% ~ 50%"}
-                    {category === "web" && "약 50% ~ 70%"}
-                    {category === "screenshot" && "약 60% ~ 80%"}
+                    {category === "high-quality" && "약 10% ~ 30% (무손실)"}
+                    {category === "photo" && "약 60% ~ 70% 절감"}
+                    {category === "web" && "약 80% ~ 90% 절감 (FHD)"}
+                    {category === "screenshot" && "약 70% ~ 80% 절감"}
                   </div>
                 </div>
               </div>
