@@ -4,13 +4,19 @@ import sharp from "sharp";
 import { CompressionRequest, CompressionResponse } from "@/types/image";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 
-function parseWebSizeDimension(value: number | undefined, label: string, allowZero = false) {
+function parseWebSizeDimension(
+  value: number | undefined,
+  label: string,
+  allowZero = false,
+) {
   if (value === undefined) {
     return null;
   }
 
   if (!Number.isFinite(value) || (allowZero ? value < 0 : value <= 0)) {
-    throw new Error(`${label} must be ${allowZero ? '0 or greater' : 'greater than 0'}.`);
+    throw new Error(
+      `${label} must be ${allowZero ? "0 or greater" : "greater than 0"}.`,
+    );
   }
 
   return Math.round(value);
@@ -22,7 +28,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload: CompressionRequest = await req.json();
-    const { sourceUrl: requestSourceUrl, filename, mimeType, category, targetFormat, webWidth, webHeight, webX, webY, uploadId, preserveSource } = payload;
+    const {
+      sourceUrl: requestSourceUrl,
+      filename,
+      mimeType,
+      category,
+      targetFormat,
+      webWidth,
+      webHeight,
+      webX,
+      webY,
+      uploadId,
+      preserveSource,
+    } = payload;
     sourceUrl = requestSourceUrl;
     shouldPreserveSource = !!preserveSource;
 
@@ -43,8 +61,12 @@ export async function POST(req: NextRequest) {
     const inputBuffer = Buffer.from(sourceArrayBuffer);
     const originalSize = inputBuffer.length;
 
-    const isGif = mimeType === "image/gif" || filename.toLowerCase().endsWith(".gif");
-    let sharpInstance = sharp(inputBuffer, isGif ? { animated: true } : undefined);
+    const isGif =
+      mimeType === "image/gif" || filename.toLowerCase().endsWith(".gif");
+    let sharpInstance = sharp(
+      inputBuffer,
+      isGif ? { animated: true } : undefined,
+    );
     if (!isGif) {
       sharpInstance = sharpInstance.rotate();
     }
@@ -55,7 +77,9 @@ export async function POST(req: NextRequest) {
     }
 
     let outputMime = mimeType;
-    let outputExt = filename.includes(".") ? filename.split(".").pop() || "" : "";
+    let outputExt = filename.includes(".")
+      ? filename.split(".").pop() || ""
+      : "";
 
     if (targetFormat === "png") {
       outputMime = "image/png";
@@ -82,14 +106,14 @@ export async function POST(req: NextRequest) {
         quality = 95;
         break;
       case "photo":
-        quality = 90;
+        quality = 70;
         break;
       case "web":
-        quality = 82;
+        quality = 70;
         resizeWidth = 1920;
         break;
       case "screenshot":
-        quality = 75;
+        quality = 55;
         break;
     }
 
@@ -116,8 +140,14 @@ export async function POST(req: NextRequest) {
         // For screenshots (URL capture), we CROP from the specified (X, Y) based on user's drag area
         const cropLeft = Math.max(0, Math.min(targetX, metadata.width - 1));
         const cropTop = Math.max(0, Math.min(targetY, metadata.height - 1));
-        const cropWidth = Math.max(1, Math.min(targetWidth, metadata.width - cropLeft));
-        const cropHeight = Math.max(1, Math.min(targetHeight, metadata.height - cropTop));
+        const cropWidth = Math.max(
+          1,
+          Math.min(targetWidth, metadata.width - cropLeft),
+        );
+        const cropHeight = Math.max(
+          1,
+          Math.min(targetHeight, metadata.height - cropTop),
+        );
 
         sharpInstance = sharpInstance.extract({
           left: cropLeft,
@@ -127,9 +157,13 @@ export async function POST(req: NextRequest) {
         });
       } else {
         // For other categories, we RESIZE (contain) to the target dimensions
-        const background = (outputMime === "image/png" || outputMime === "image/webp" || outputMime === "image/avif" || outputMime === "image/gif")
-          ? { r: 255, g: 255, b: 255, alpha: 0 }
-          : { r: 255, g: 255, b: 255, alpha: 1 };
+        const background =
+          outputMime === "image/png" ||
+          outputMime === "image/webp" ||
+          outputMime === "image/avif" ||
+          outputMime === "image/gif"
+            ? { r: 255, g: 255, b: 255, alpha: 0 }
+            : { r: 255, g: 255, b: 255, alpha: 1 };
 
         sharpInstance = sharpInstance.resize(targetWidth, targetHeight, {
           fit: "contain",
@@ -173,11 +207,7 @@ export async function POST(req: NextRequest) {
         })
         .toBuffer();
     } else if (outputMime === "image/avif") {
-      let avifQuality = 70;
-      if (category === "high-quality") avifQuality = 95;
-      else if (category === "photo") avifQuality = 85;
-      else if (category === "web") avifQuality = 78;
-      else if (category === "screenshot") avifQuality = 70;
+      const avifQuality = category === "high-quality" ? 95 : Math.max(50, quality - 5);
 
       outputBuffer = await sharpInstance
         .avif({
@@ -231,7 +261,9 @@ export async function POST(req: NextRequest) {
     const outputPathname = `optimized/${uploadId}/${outputFilename}`;
 
     const finalBuffer =
-      outputMime === mimeType && outputBuffer.length >= originalSize ? inputBuffer : outputBuffer;
+      outputMime === mimeType && outputBuffer.length >= originalSize
+        ? inputBuffer
+        : outputBuffer;
 
     const blob = await put(outputPathname, finalBuffer, {
       access: "public",
@@ -289,7 +321,7 @@ export async function POST(req: NextRequest) {
         originalSize: 0,
         outputFilename: "",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
