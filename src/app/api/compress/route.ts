@@ -78,18 +78,18 @@ export async function POST(req: NextRequest) {
     let resizeWidth: number | undefined;
 
     switch (category) {
-      case "photo":
-        quality = 88;
-        break;
-      case "screenshot":
-        quality = 86;
-        break;
-      case "web":
-        quality = 80;
-        resizeWidth = 1920;
-        break;
       case "high-quality":
         quality = 95;
+        break;
+      case "photo":
+        quality = 90;
+        break;
+      case "web":
+        quality = 82;
+        resizeWidth = 1920;
+        break;
+      case "screenshot":
+        quality = 75;
         break;
     }
 
@@ -142,7 +142,8 @@ export async function POST(req: NextRequest) {
 
     let outputBuffer: Buffer;
     if (outputMime === "image/png") {
-      if (category === "high-quality") {
+      if (category === "photo" || category === "high-quality") {
+        // Photo & High-Quality keep full 24/32-bit truecolor for zero color banding in photographs
         outputBuffer = await sharpInstance
           .png({
             compressionLevel: 9,
@@ -151,13 +152,14 @@ export async function POST(req: NextRequest) {
           })
           .toBuffer();
       } else {
+        // Screenshot & Web use smart palette quantization for max PNG size reduction while preserving sharp UI text
         outputBuffer = await sharpInstance
           .png({
             quality,
             compressionLevel: 9,
             effort: 8,
             palette: true,
-            dither: category === "screenshot" ? 0.5 : 1.0,
+            dither: 0.5,
           })
           .toBuffer();
       }
@@ -171,9 +173,15 @@ export async function POST(req: NextRequest) {
         })
         .toBuffer();
     } else if (outputMime === "image/avif") {
+      let avifQuality = 70;
+      if (category === "high-quality") avifQuality = 95;
+      else if (category === "photo") avifQuality = 85;
+      else if (category === "web") avifQuality = 78;
+      else if (category === "screenshot") avifQuality = 70;
+
       outputBuffer = await sharpInstance
         .avif({
-          quality: category === "screenshot" ? Math.max(70, quality - 8) : Math.max(65, quality - 12),
+          quality: avifQuality,
           effort: 5,
           chromaSubsampling: category === "screenshot" ? "4:4:4" : "4:2:0",
           lossless: category === "high-quality",
@@ -182,17 +190,17 @@ export async function POST(req: NextRequest) {
     } else if (outputMime === "image/gif") {
       let gifColours = 256;
       switch (category) {
-        case "screenshot":
+        case "high-quality":
           gifColours = 256;
-          break;
-        case "web":
-          gifColours = 192;
           break;
         case "photo":
           gifColours = 256;
           break;
-        case "high-quality":
-          gifColours = 256;
+        case "web":
+          gifColours = 224;
+          break;
+        case "screenshot":
+          gifColours = 192;
           break;
       }
 

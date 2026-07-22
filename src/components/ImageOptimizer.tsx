@@ -185,10 +185,10 @@ export default function ImageOptimizer({
                   </>
                 ) : (
                   <>
-                    {category === "screenshot" && "Screenshot Engine"}
+                    {category === "high-quality" && "Lossless Master"}
                     {category === "photo" && "Photography Engine"}
                     {category === "web" && "Web Optimization"}
-                    {category === "high-quality" && "Lossless Master"}
+                    {category === "screenshot" && "Screenshot Engine"}
                   </>
                 )}
               </h3>
@@ -197,18 +197,46 @@ export default function ImageOptimizer({
                   `${forcedFormat.toUpperCase()} 인코딩을 위해 최적화된 고성능 연산 모델을 적용합니다.`
                 ) : (
                   <>
-                    {category === "screenshot" &&
-                      "정밀한 엣지 보존 알고리즘으로 텍스트 가독성을 최상으로 유지하며 압축합니다."}
+                    {category === "high-quality" &&
+                      "데이터 무결성을 보장하는 무손실 압축으로 원본의 품질을 그대로 유지합니다."}
                     {category === "photo" &&
                       "지능형 질감 분석을 통해 자연스러운 색조와 세부 디테일을 완벽하게 보존합니다."}
                     {category === "web" &&
                       "현대적 웹 성능 지표를 고려한 리사이징과 화질 최적화로 로딩 속도를 혁신합니다."}
-                    {category === "high-quality" &&
-                      "데이터 무결성을 보장하는 무손실 압축으로 원본의 품질을 그대로 유지합니다."}
+                    {category === "screenshot" &&
+                      "정밀한 엣지 보존 알고리즘으로 텍스트 가독성을 최상으로 유지하며 대폭 압축합니다."}
                   </>
                 )}
               </p>
             </div>
+
+            {!forcedFormat && (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    예상 화질 등급
+                  </span>
+                  <div className="text-sm font-extrabold text-teal-300">
+                    {category === "high-quality" && "최상급 (Quality 95)"}
+                    {category === "photo" && "고화질 (Quality 90)"}
+                    {category === "web" && "권장 표준 (Quality 82)"}
+                    {category === "screenshot" && "고압축 (Quality 75)"}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    예상 용량 절감
+                  </span>
+                  <div className="text-sm font-extrabold text-white">
+                    {category === "high-quality" && "약 10% ~ 30%"}
+                    {category === "photo" && "약 30% ~ 50%"}
+                    {category === "web" && "약 50% ~ 70%"}
+                    {category === "screenshot" && "약 60% ~ 80%"}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {category === "web" && (

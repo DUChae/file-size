@@ -32,31 +32,36 @@ const COMPRESSING_MODES: Array<{
   id: ImageCategory;
   label: string;
   description: string;
+  qualityBadge: string;
   icon: React.ReactNode;
 }> = [
   {
-    id: "screenshot",
-    label: "스크린샷",
-    description: "UI 및 텍스트 최적화",
-    icon: <Layout className="w-4 h-4" />,
+    id: "high-quality",
+    label: "고품질",
+    description: "원형 보전 무손실 압축",
+    qualityBadge: "Quality 95",
+    icon: <ShieldCheck className="w-4 h-4" />,
   },
   {
     id: "photo",
     label: "사진",
-    description: "질감 보존 JPEG 압축",
+    description: "디테일 & 색감 보존",
+    qualityBadge: "Quality 90",
     icon: <ImageIcon className="w-4 h-4" />,
   },
   {
     id: "web",
     label: "웹 엔진",
-    description: "리사이징 및 초경량화",
+    description: "웹 로딩 최적화",
+    qualityBadge: "Quality 82",
     icon: <Globe className="w-4 h-4" />,
   },
   {
-    id: "high-quality",
-    label: "고품질",
-    description: "메타데이터 무손실 압축",
-    icon: <ShieldCheck className="w-4 h-4" />,
+    id: "screenshot",
+    label: "스크린샷",
+    description: "텍스트 경계선 고압축",
+    qualityBadge: "Quality 75",
+    icon: <Layout className="w-4 h-4" />,
   },
 ];
 
@@ -185,17 +190,24 @@ export default function ToolWorkspace() {
                   key={option.id}
                   onClick={() => setMode(option.id)}
                   className={cn(
-                    "group relative flex items-center gap-3 px-5 py-3.5 rounded-2xl border text-sm font-bold transition-all active:scale-[0.98]",
+                    "group relative flex items-center gap-2.5 px-5 py-3.5 rounded-2xl border text-sm font-bold transition-all active:scale-[0.98]",
                     mode === option.id
                       ? "bg-white border-white text-black shadow-[0_16px_50px_rgba(255,255,255,0.12)]"
                       : "bg-white/[0.025] border-white/10 text-slate-500 hover:border-white/20 hover:bg-white/[0.045] hover:text-white",
                   )}
                 >
                   {option.icon}
-                  {option.label}
-                  {mode === option.id && (
-                    <span className="text-[10px] font-black opacity-40 ml-1 hidden md:inline tracking-widest">
-                      ACTIVE
+                  <span>{option.label}</span>
+                  {"qualityBadge" in option && (
+                    <span
+                      className={cn(
+                        "text-[10px] font-black px-2 py-0.5 rounded-full border transition-all ml-0.5",
+                        mode === option.id
+                          ? "bg-black/10 border-black/20 text-black"
+                          : "bg-teal-300/[0.08] border-teal-300/20 text-teal-300"
+                      )}
+                    >
+                      {option.qualityBadge}
                     </span>
                   )}
                 </button>
