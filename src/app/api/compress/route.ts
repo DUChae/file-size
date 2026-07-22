@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
         resizeWidth = 1920;
         break;
       case "screenshot":
-        quality = 80;
+        quality = 75;
         break;
     }
 

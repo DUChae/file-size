@@ -64,9 +64,15 @@ export default function ImageOptimizer({
       const newItems: QueueItem[] = fileArray
         .filter(
           (f) =>
-            ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"].includes(
-              f.type,
-            ) || f.name.toLowerCase().endsWith(".avif") || f.name.toLowerCase().endsWith(".gif"),
+            [
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/gif",
+            ].includes(f.type) ||
+            f.name.toLowerCase().endsWith(".avif") ||
+            f.name.toLowerCase().endsWith(".gif"),
         )
         .map((file) => ({
           id: Math.random().toString(36).substring(2, 9),
@@ -220,7 +226,7 @@ export default function ImageOptimizer({
                     {category === "high-quality" && "최상급 (Quality 95)"}
                     {category === "photo" && "고화질 (Quality 90)"}
                     {category === "web" && "권장 표준 (Quality 82)"}
-                    {category === "screenshot" && "고압축 (Quality 80)"}
+                    {category === "screenshot" && "고압축 (Quality 75)"}
                   </div>
                 </div>
 
@@ -232,7 +238,7 @@ export default function ImageOptimizer({
                     {category === "high-quality" && "약 10% ~ 30% (무손실)"}
                     {category === "photo" && "약 60% ~ 70% 절감"}
                     {category === "web" && "약 80% ~ 90% 절감 (FHD)"}
-                    {category === "screenshot" && "약 70% ~ 80% 절감"}
+                    {category === "screenshot" && "약 80% ~ 85% 절감"}
                   </div>
                 </div>
               </div>
@@ -273,23 +279,23 @@ export default function ImageOptimizer({
               Export Format
             </h4>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 p-1.5 bg-black/20 border border-white/10 rounded-2xl">
-              {(["original", "png", "jpeg", "webp", "avif", "gif"] as const).map(
-                (fmt) => (
-                  <button
-                    key={fmt}
-                    onClick={() => !forcedFormat && setGlobalFormat(fmt)}
-                    disabled={!!forcedFormat}
-                    className={cn(
-                      "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider active:scale-[0.98]",
-                      globalFormat === fmt
-                        ? "bg-white text-black shadow-xl"
-                        : "text-slate-500 hover:text-white disabled:opacity-20",
-                    )}
-                  >
-                    {fmt === "original" ? "ORIG" : fmt.toUpperCase()}
-                  </button>
-                ),
-              )}
+              {(
+                ["original", "png", "jpeg", "webp", "avif", "gif"] as const
+              ).map((fmt) => (
+                <button
+                  key={fmt}
+                  onClick={() => !forcedFormat && setGlobalFormat(fmt)}
+                  disabled={!!forcedFormat}
+                  className={cn(
+                    "py-3 rounded-xl text-[10px] font-black transition-all tracking-wider active:scale-[0.98]",
+                    globalFormat === fmt
+                      ? "bg-white text-black shadow-xl"
+                      : "text-slate-500 hover:text-white disabled:opacity-20",
+                  )}
+                >
+                  {fmt === "original" ? "ORIG" : fmt.toUpperCase()}
+                </button>
+              ))}
             </div>
           </div>
           <div className="bg-teal-300/[0.045] border border-teal-300/10 rounded-2xl p-6">
@@ -398,7 +404,10 @@ export default function ImageOptimizer({
                   draggable={isInsideFigma() && item.status === "done"}
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "copy";
-                    event.dataTransfer.setData("text/plain", item.originalFile.name);
+                    event.dataTransfer.setData(
+                      "text/plain",
+                      item.originalFile.name,
+                    );
                   }}
                   onDragEnd={(event) => {
                     if (!item.optimizedUrl || !event.view) return;
@@ -412,7 +421,9 @@ export default function ImageOptimizer({
                   }}
                   className={cn(
                     "p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors",
-                    isInsideFigma() && item.status === "done" && "cursor-grab active:cursor-grabbing",
+                    isInsideFigma() &&
+                      item.status === "done" &&
+                      "cursor-grab active:cursor-grabbing",
                   )}
                 >
                   <div className="flex-1 min-w-0 flex items-center gap-8">
@@ -459,7 +470,10 @@ export default function ImageOptimizer({
                               if (item.optimizedUrl) {
                                 const response = await fetch(item.optimizedUrl);
                                 const blob = await response.blob();
-                                await sendImageToFigma(blob, item.optimizedFilename || "image.png");
+                                await sendImageToFigma(
+                                  blob,
+                                  item.optimizedFilename || "image.png",
+                                );
                               }
                             }}
                             className="w-12 h-12 rounded-full border border-teal-300/30 bg-teal-300/10 text-teal-300 flex items-center justify-center hover:bg-teal-300 hover:text-black transition-all shadow-lg active:scale-90"
