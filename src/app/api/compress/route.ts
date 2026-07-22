@@ -106,14 +106,14 @@ export async function POST(req: NextRequest) {
         quality = 95;
         break;
       case "photo":
-        quality = 70;
+        quality = 90;
         break;
       case "web":
-        quality = 70;
+        quality = 82;
         resizeWidth = 1920;
         break;
       case "screenshot":
-        quality = 55;
+        quality = 80;
         break;
     }
 
