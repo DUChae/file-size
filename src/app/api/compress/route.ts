@@ -176,8 +176,8 @@ export async function POST(req: NextRequest) {
 
     let outputBuffer: Buffer;
     if (outputMime === "image/png") {
-      if (category === "photo" || category === "high-quality") {
-        // Photo & High-Quality keep full 24/32-bit truecolor for zero color banding in photographs
+      if (category === "high-quality") {
+        // High-Quality keeps full 24/32-bit truecolor for zero color loss
         outputBuffer = await sharpInstance
           .png({
             compressionLevel: 9,
@@ -186,14 +186,14 @@ export async function POST(req: NextRequest) {
           })
           .toBuffer();
       } else {
-        // Screenshot & Web use smart palette quantization for max PNG size reduction while preserving sharp UI text
+        // Photo, Web, Screenshot use smart palette quantization matched to their respective quality
         outputBuffer = await sharpInstance
           .png({
             quality,
             compressionLevel: 9,
             effort: 8,
             palette: true,
-            dither: 0.5,
+            dither: category === "photo" ? 1.0 : 0.5,
           })
           .toBuffer();
       }
