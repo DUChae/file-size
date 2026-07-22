@@ -79,17 +79,17 @@ export async function POST(req: NextRequest) {
 
     switch (category) {
       case "screenshot":
-        quality = 82;
+        quality = 85;
         break;
       case "photo":
-        quality = 75;
+        quality = 90;
         break;
       case "web":
-        quality = 65;
-        resizeWidth = 1200;
+        quality = 78;
+        resizeWidth = 1600;
         break;
       case "high-quality":
-        quality = 92;
+        quality = 95;
         break;
     }
 
@@ -144,10 +144,9 @@ export async function POST(req: NextRequest) {
     if (outputMime === "image/png") {
       outputBuffer = await sharpInstance
         .png({
-          quality: category === "high-quality" ? 95 : 80,
+          quality,
           compressionLevel: 9,
-          palette: category !== "high-quality",
-          colors: 256,
+          palette: false,
         })
         .toBuffer();
     } else if (outputMime === "image/webp") {
@@ -161,9 +160,9 @@ export async function POST(req: NextRequest) {
     } else if (outputMime === "image/avif") {
       outputBuffer = await sharpInstance
         .avif({
-          quality: quality - 10, // AVIF usually needs lower quality value for same perceived quality
+          quality: Math.max(50, quality - 5),
           effort: 4,
-          chromaSubsampling: "4:2:0",
+          chromaSubsampling: category === "screenshot" ? "4:4:4" : "4:2:0",
           lossless: category === "high-quality",
         })
         .toBuffer();
@@ -171,13 +170,13 @@ export async function POST(req: NextRequest) {
       let gifColours = 256;
       switch (category) {
         case "screenshot":
-          gifColours = 128;
+          gifColours = 192;
           break;
         case "web":
-          gifColours = 128;
+          gifColours = 192;
           break;
         case "photo":
-          gifColours = 192;
+          gifColours = 256;
           break;
         case "high-quality":
           gifColours = 256;
