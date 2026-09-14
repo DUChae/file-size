@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Client } from "@gradio/client";
 
 export const maxDuration = 60; // Vercel 함수 최대 실행 시간
 
+let cachedClient: any = null;
+
+async function getBiRefNetClient(token: string) {
+  if (!cachedClient) {
+    cachedClient = await Client.connect("ZhengPeng7/BiRefNet_demo", {
+      token: token as `hf_${string}`,
+    });
+  }
+  return cachedClient;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.HUGGINGFACE_API_KEY;
+    const apiKey = process.env.HUGGINGFACE_API_KEY?.trim();
     if (!apiKey) {
       return NextResponse.json(
         { error: "HUGGINGFACE_API_KEY가 설정되지 않았습니다." },
@@ -14,6 +26,7 @@ export async function POST(req: NextRequest) {
 
     const contentType = req.headers.get("content-type") || "";
     let imageBuffer: ArrayBuffer;
+    let mimeType = "image/png";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -24,6 +37,7 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      mimeType = file.type || "image/png";
       imageBuffer = await file.arrayBuffer();
     } else {
       imageBuffer = await req.arrayBuffer();
@@ -36,60 +50,57 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const modelEndpoint =
-      "https://router.huggingface.co/hf-inference/models/briaai/RMBG-1.4";
+    const client = await getBiRefNetClient(apiKey);
+    const inputBlob = new Blob([imageBuffer], { type: mimeType });
 
-    // 모델 슬립 상태(503) 대응 재시도 루프
-    const maxRetries = 3;
-    let attempt = 0;
-    let lastError = "";
+    // BiRefNet SOTA 모델 추론 호출 (/image)
+    const result: any = await client.predict("/image", [
+      inputBlob,
+      "", // Resolution (기본 유지)
+      "General", // 최고 품질 범용 가중치
+    ]);
 
-    while (attempt < maxRetries) {
-      attempt++;
-      const hfResponse = await fetch(modelEndpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey.trim()}`,
-          "Content-Type": "image/png",
-        },
-        body: imageBuffer,
-      });
-
-      if (hfResponse.ok) {
-        const resultPng = await hfResponse.arrayBuffer();
-        return new Response(resultPng, {
-          status: 200,
-          headers: {
-            "Content-Type": "image/png",
-            "Cache-Control": "public, max-age=31536000, immutable",
-          },
-        });
-      }
-
-      if (hfResponse.status === 503) {
-        // 모델 가동 중 대기 후 재시도
-        const errorJson = await hfResponse.json().catch(() => ({}));
-        const waitTime = Math.min(10, Math.max(2, errorJson.estimated_time || 3));
-        await new Promise((resolve) => setTimeout(resolve, waitTime * 1000));
-        continue;
-      }
-
-      const errorText = await hfResponse.text().catch(() => "Unknown error");
-      lastError = `HF API 에러 (${hfResponse.status}): ${errorText}`;
-      break;
+    if (!result?.data || !Array.isArray(result.data) || !result.data[0]) {
+      throw new Error("AI 엔진으로부터 유효한 마스크 결과를 수신하지 못했습니다.");
     }
 
-    return NextResponse.json(
-      { error: lastError || "배경 제거 처리 실패" },
-      { status: 500 },
-    );
+    const resultTuple = result.data[0];
+    const outputItem = Array.isArray(resultTuple) ? resultTuple[1] : resultTuple;
+    const outputUrl = outputItem?.url;
+
+    if (!outputUrl) {
+      throw new Error("배경 제거 결과 이미지 URL을 찾을 수 없습니다.");
+    }
+
+    // 결과 투명 PNG 다운로드
+    const downloadRes = await fetch(outputUrl, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!downloadRes.ok) {
+      throw new Error(`결과 이미지 다운로드 실패 (${downloadRes.status})`);
+    }
+
+    const pngBuffer = await downloadRes.arrayBuffer();
+
+    return new Response(pngBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
   } catch (error) {
+    cachedClient = null; // 오류 발생 시 클라이언트 재연결을 위해 캐시 초기화
+    console.error("remove-bg error:", error);
     return NextResponse.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "서버 처리 중 오류가 발생했습니다.",
+            : "배경 제거 처리 중 서버 오류가 발생했습니다.",
       },
       { status: 500 },
     );
