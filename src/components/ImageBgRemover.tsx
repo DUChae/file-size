@@ -116,7 +116,7 @@ export default function ImageBgRemover() {
                 ? {
                     ...it,
                     status: "done",
-                    optimizedFilename: `${nameWithoutExt}.optimized.png`,
+                    optimizedFilename: `${nameWithoutExt}.no-bg.png`,
                     optimizedUrl: localUrl,
                     optimizedDownloadUrl: localUrl,
                     optimizedSize: transparentBlob.size,
@@ -312,8 +312,26 @@ export default function ImageBgRemover() {
                   )}
                 >
                   <div className="flex-1 min-w-0 flex items-center gap-8">
-                    <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 shadow-inner group-hover:border-white/20 transition-colors">
-                      <ImageIcon className="w-5 h-5 text-slate-500" />
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 shadow-inner group-hover:border-white/20 transition-colors overflow-hidden relative">
+                      {item.status === "done" && item.optimizedUrl ? (
+                        <div
+                          className="w-full h-full flex items-center justify-center p-1 rounded-xl"
+                          style={{
+                            backgroundImage:
+                              "repeating-conic-gradient(#3a3a3a 0% 25%, #222222 0% 50%)",
+                            backgroundPosition: "0 0, 6px 6px",
+                            backgroundSize: "12px 12px",
+                          }}
+                        >
+                          <img
+                            src={item.optimizedUrl}
+                            alt="Result preview"
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <ImageIcon className="w-5 h-5 text-slate-500" />
+                      )}
                     </div>
                     <div className="flex flex-col gap-2 min-w-0">
                       <span className="text-sm font-bold text-white truncate leading-none">
