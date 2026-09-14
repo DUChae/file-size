@@ -85,14 +85,18 @@ export default function ImageBgRemover() {
             ),
           );
 
-          // 2단계: 브라우저 온디바이스 AI 매팅 엔진을 활용하여 배경을 소거합니다.
+          // 2단계: 브라우저 온디바이스 SOTA AI 매팅 엔진(RMBG-1.4)을 활용하여 배경을 소거합니다.
           const transparentBlob = await removeImageBackground(
             nextItem.originalFile,
-            (progress) => {
+            (progress, stage) => {
               setQueue((q) =>
                 q.map((it) =>
                   it.id === nextItem.id
-                    ? { ...it, bgRemovalProgress: progress }
+                    ? {
+                        ...it,
+                        bgRemovalProgress: progress,
+                        bgRemovalStage: stage,
+                      }
                     : it,
                 ),
               );
@@ -175,7 +179,7 @@ export default function ImageBgRemover() {
                 <span className="text-teal-300">BG REMOVER</span> Engine
               </h3>
               <p className="text-base text-slate-400 font-medium leading-relaxed">
-                업로드된 이미지의 특성을 스스로 분석하여 AI 피사체 인식 또는 서명/텍스트 최적화 기법을 자동으로 선택해 배경을 지워줍니다.
+                remove.bg급 SOTA AI 모델(BRIA RMBG-1.4)을 브라우저 WebGPU 하드웨어 가속으로 구동하여 머리카락까지 정교하게 배경을 지워줍니다.
               </p>
             </div>
           </div>
@@ -201,7 +205,7 @@ export default function ImageBgRemover() {
               Technical Insight
             </div>
             <p className="text-sm text-teal-50/60 font-medium leading-relaxed">
-              본 엔진은 이미지 속 배경색 비율과 채도를 분석해 자필 서명 여부를 판별합니다. 서명인 경우 초고속 픽셀 단위 Color-to-Alpha 기법을 적용해 흰 테두리 흔적까지 완벽히 소거하며, 일반 사물은 로컬 AI 피사체 인식 모델로 지워냅니다.
+              Vercel 서버리스 페이로드 제한(4.5MB)과 타임아웃을 피하기 위해 클라이언트 온디바이스 AI 매팅을 적용했습니다. 외부 유료 API 없이 100% 무료로 구동되며, 모델 가중치는 브라우저 캐시에 저장되어 이후 즉시 실행됩니다.
             </p>
           </div>
         </div>
@@ -244,7 +248,7 @@ export default function ImageBgRemover() {
               자동으로 분류 및 처리할 파일을 드롭하거나 클릭하세요
             </h3>
             <p className="text-xs text-slate-500 font-semibold">
-              서명은 초고속 Color-to-Alpha 필터로, 일반 사진은 AI 엔진 가속 모델로 자동 분석 및 처리됩니다.
+              RMBG-1.4 고정밀 딥러닝 매팅 모델로 인물, 사물, 그래픽의 배경을 정밀하게 제거합니다.
             </p>
           </div>
         </div>
@@ -391,9 +395,13 @@ export default function ImageBgRemover() {
 }
 
 function StatusBadge({ item }: { item: QueueItem }) {
+  const removingLabel = item.bgRemovalStage
+    ? `${item.bgRemovalStage}`
+    : `Removing BG (${item.bgRemovalProgress || 0}%)`;
+
   const labels = {
     queued: "Queued",
-    "removing-bg": `Removing BG (${item.bgRemovalProgress || 0}%)`,
+    "removing-bg": removingLabel,
     uploading: "Uploading",
     compressing: "Processing",
     done: "Completed",

@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: { unoptimized: true },
+  serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node", "sharp"],
   async headers() {
     return [
       {

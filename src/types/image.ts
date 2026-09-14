@@ -26,6 +26,7 @@ export interface QueueItem {
   optimizedUrl?: string;
   optimizedDownloadUrl?: string;
   bgRemovalProgress?: number;
+  bgRemovalStage?: string;
   removalMode?: "auto" | "ai" | "color";
 }
 
