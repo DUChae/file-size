@@ -346,22 +346,31 @@ export default function ImageBgRemover() {
                     </div>
                   </div>
 
-                  <div className="hidden md:flex flex-col items-end gap-2 min-w-[140px] pr-4">
-                    <div className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
-                      Total Reduction
+                  <div className="hidden md:flex flex-col items-end gap-1.5 min-w-[140px] pr-4">
+                    <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                      Output Size
                     </div>
                     <div
                       className={cn(
                         "text-2xl font-black tracking-tighter leading-none",
-                        item.reductionRate !== undefined
-                          ? "text-white"
-                          : "text-slate-900",
+                        item.optimizedSize ? "text-white" : "text-slate-800",
                       )}
                     >
-                      {item.reductionRate !== undefined
-                        ? `-${item.reductionRate.toFixed(1)}%`
-                        : "00.0%"}
+                      {item.optimizedSize ? formatSize(item.optimizedSize) : "0 B"}
                     </div>
+                    {item.reductionRate !== undefined && item.status === "done" && (
+                      <div className="text-[10px] font-bold tracking-tight">
+                        {item.reductionRate > 0 ? (
+                          <span className="text-teal-300">
+                            -{item.reductionRate.toFixed(1)}% 절감
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">
+                            +{Math.abs(item.reductionRate).toFixed(1)}% (투명 PNG)
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-center gap-2 min-w-[48px]">
