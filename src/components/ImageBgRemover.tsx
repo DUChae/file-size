@@ -5,7 +5,10 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem } from "@/types/image";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
-import { removeImageBackground } from "@/utils/backgroundRemoval";
+import {
+  removeImageBackground,
+  convertBlobFormat,
+} from "@/utils/backgroundRemoval";
 import {
   dropImageInFigma,
   isInsideFigma,
@@ -27,6 +30,7 @@ const CONCURRENCY = 1; // 배경 제거는 CPU 연산이 매우 무거우므로 
 export default function ImageBgRemover() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"png" | "webp" | "jpeg">("png");
   const processingRef = useRef<number>(0);
 
   const formatSize = (bytes: number) => {
@@ -55,7 +59,7 @@ export default function ImageBgRemover() {
           originalSize: file.size,
           status: "queued",
           category: "screenshot", 
-          targetFormat: "png",    
+          targetFormat: exportFormat,    
           webWidth: "",
           webHeight: "",
           bgRemovalProgress: 0,
@@ -64,7 +68,7 @@ export default function ImageBgRemover() {
 
       setQueue((prev) => [...prev, ...newItems]);
     },
-    [queue.length],
+    [queue.length, exportFormat],
   );
 
   const processQueue = useCallback(async () => {
@@ -103,12 +107,24 @@ export default function ImageBgRemover() {
             },
           );
 
-          // 2단계: 결과 PNG 블롭을 기반으로 즉시 브라우저 로컬 Object URL을 발행하여 완료합니다. (서버 전송 스킵)
+          // 3단계: 선택된 확장자 포맷(PNG, WEBP, JPG)으로 고속 변환
+          const targetFmt =
+            nextItem.targetFormat === "jpeg" || nextItem.targetFormat === "webp"
+              ? nextItem.targetFormat
+              : exportFormat;
+
+          const finalBlob = await convertBlobFormat(
+            transparentBlob,
+            targetFmt === "webp" || targetFmt === "jpeg" ? targetFmt : "png",
+          );
+
           const originalName = nextItem.originalFile.name;
           const extIndex = originalName.lastIndexOf(".");
-          const nameWithoutExt = extIndex !== -1 ? originalName.substring(0, extIndex) : originalName;
-          
-          const localUrl = URL.createObjectURL(transparentBlob);
+          const nameWithoutExt =
+            extIndex !== -1 ? originalName.substring(0, extIndex) : originalName;
+
+          const ext = targetFmt === "jpeg" ? "jpg" : targetFmt;
+          const localUrl = URL.createObjectURL(finalBlob);
 
           setQueue((q) =>
             q.map((it) =>
@@ -116,12 +132,13 @@ export default function ImageBgRemover() {
                 ? {
                     ...it,
                     status: "done",
-                    optimizedFilename: `${nameWithoutExt}.no-bg.png`,
+                    targetFormat: targetFmt,
+                    optimizedFilename: `${nameWithoutExt}.no-bg.${ext}`,
                     optimizedUrl: localUrl,
                     optimizedDownloadUrl: localUrl,
-                    optimizedSize: transparentBlob.size,
+                    optimizedSize: finalBlob.size,
                     reductionRate:
-                      ((nextItem.originalSize - transparentBlob.size) /
+                      ((nextItem.originalSize - finalBlob.size) /
                         nextItem.originalSize) *
                       100,
                   }
@@ -179,7 +196,7 @@ export default function ImageBgRemover() {
                 <span className="text-teal-300">BG REMOVER</span> Engine
               </h3>
               <p className="text-base text-slate-400 font-medium leading-relaxed">
-                remove.bg급 SOTA AI 모델(BRIA RMBG-1.4)을 브라우저 WebGPU 하드웨어 가속으로 구동하여 머리카락까지 정교하게 배경을 지워줍니다.
+                remove.bg를 능가하는 최신 SOTA 모델(BiRefNet) 기반으로 머리카락, 사물 윤곽선을 칼같이 분리합니다.
               </p>
             </div>
           </div>
@@ -188,24 +205,42 @@ export default function ImageBgRemover() {
         <div className="space-y-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6 md:p-8 backdrop-blur-xl">
           <div className="space-y-6">
             <h4 className="text-xs font-semibold text-slate-500">
-              Export Format Info
+              Export Format
             </h4>
-            <div className="flex items-center gap-4 bg-black/20 border border-white/10 rounded-2xl p-4">
-              <span className="bg-white text-black text-xs font-black px-4 py-2.5 rounded-xl">
-                PNG (FORCED)
-              </span>
+            <div className="grid grid-cols-3 gap-2 p-1.5 bg-black/20 border border-white/10 rounded-2xl">
+              {(["png", "webp", "jpeg"] as const).map((fmt) => (
+                <button
+                  key={fmt}
+                  onClick={() => setExportFormat(fmt)}
+                  className={cn(
+                    "py-3 rounded-xl text-xs font-black transition-all tracking-wider active:scale-[0.98]",
+                    exportFormat === fmt
+                      ? "bg-white text-black shadow-xl"
+                      : "text-slate-500 hover:text-white",
+                  )}
+                >
+                  {fmt === "jpeg" ? "JPG" : fmt.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <div className="p-4 bg-black/20 border border-white/10 rounded-2xl">
               <p className="text-xs text-slate-400 font-semibold leading-relaxed">
-                배경의 투명 알파 채널을 완벽하게 보존해야 하므로 최종 결과물은 항상 PNG 포맷으로 강제 인코딩됩니다.
+                {exportFormat === "png" &&
+                  "PNG: 투명 알파 채널을 100% 무손실로 보존하는 표준 투명 포맷입니다."}
+                {exportFormat === "webp" &&
+                  "WEBP: 투명 알파 채널을 완벽히 유지하면서 PNG 대비 약 70% 가볍게 초고압축합니다."}
+                {exportFormat === "jpeg" &&
+                  "JPG: 투명도를 지원하지 않는 규격이므로, 투명 배경이 깔끔한 흰색(White) 배경으로 채워집니다."}
               </p>
             </div>
           </div>
           <div className="bg-teal-300/[0.045] border border-teal-300/10 rounded-2xl p-6">
             <div className="text-[11px] font-black text-teal-300 mb-2 flex items-center gap-2 tracking-widest uppercase">
               <Info className="w-3.5 h-3.5" />
-              Technical Insight
+              Format Tip
             </div>
             <p className="text-sm text-teal-50/60 font-medium leading-relaxed">
-              Vercel 서버리스 페이로드 제한(4.5MB)과 타임아웃을 피하기 위해 클라이언트 온디바이스 AI 매팅을 적용했습니다. 외부 유료 API 없이 100% 무료로 구동되며, 모델 가중치는 브라우저 캐시에 저장되어 이후 즉시 실행됩니다.
+              웹사이트나 앱에 사용할 이미지라면 <strong className="text-teal-300">WEBP</strong>를 추천합니다. 투명 배경은 온전히 살리면서 용량을 획기적으로 줄일 수 있습니다.
             </p>
           </div>
         </div>
@@ -342,6 +377,11 @@ export default function ImageBgRemover() {
                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
                           {formatSize(item.originalSize)}
                         </span>
+                        {item.status === "done" && item.targetFormat && (
+                          <span className="text-[9px] font-black text-teal-300 bg-teal-300/10 px-2 py-0.5 rounded uppercase tracking-wider border border-teal-300/20">
+                            {item.targetFormat === "jpeg" ? "JPG" : item.targetFormat}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

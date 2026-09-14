@@ -97,6 +97,61 @@ export async function removeImageBackground(
   return resultBlob;
 }
 
+/**
+ * 투명 PNG Blob을 사용자가 지정한 최종 포맷(PNG, WEBP, JPEG 등)으로 브라우저에서 고속 변환합니다.
+ * - PNG: 원본 투명 무손실 그대로 유지
+ * - WEBP: 투명 알파 채널 100% 보존 + 70% 고압축 용량 절감
+ * - JPEG: 투명 미지원 규격이므로 투명 영역을 깔끔한 흰색(White) 배경으로 채움
+ */
+export async function convertBlobFormat(
+  sourceBlob: Blob,
+  targetFormat: "png" | "webp" | "jpeg",
+): Promise<Blob> {
+  if (targetFormat === "png") {
+    return sourceBlob;
+  }
 
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(sourceBlob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(sourceBlob);
+        return;
+      }
 
+      if (targetFormat === "jpeg") {
+        // JPEG는 투명도를 지원하지 않으므로 배경을 흰색으로 먼저 채움
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
 
+      ctx.drawImage(img, 0, 0);
+
+      const mimeType = targetFormat === "jpeg" ? "image/jpeg" : "image/webp";
+      const quality = targetFormat === "jpeg" ? 0.92 : 0.90;
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            resolve(sourceBlob);
+          }
+        },
+        mimeType,
+        quality,
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("포맷 변환 중 이미지 로드 실패"));
+    };
+    img.src = url;
+  });
+}
