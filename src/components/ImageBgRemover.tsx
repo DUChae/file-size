@@ -21,6 +21,7 @@ import {
   Info,
   Image as ImageIcon,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -383,6 +384,11 @@ export default function ImageBgRemover() {
                           </span>
                         )}
                       </div>
+                      {item.status === "error" && item.error && (
+                        <p className="text-xs text-red-400 font-medium truncate max-w-sm" title={item.error}>
+                          {item.error}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -438,6 +444,33 @@ export default function ImageBgRemover() {
                           <Download className="w-5 h-5" />
                         </button>
                       </>
+                    ) : item.status === "error" ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() =>
+                            setQueue((q) =>
+                              q.map((it) =>
+                                it.id === item.id
+                                  ? { ...it, status: "queued", error: undefined }
+                                  : it,
+                              ),
+                            )
+                          }
+                          className="w-10 h-10 flex items-center justify-center text-teal-300 hover:bg-teal-300/10 rounded-full transition-all"
+                          title="다시 시도"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            setQueue((q) => q.filter((i) => i.id !== item.id))
+                          }
+                          className="w-10 h-10 flex items-center justify-center text-slate-600 hover:text-red-500 rounded-full transition-all"
+                          title="삭제"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     ) : item.status === "queued" ? (
                       <button
                         onClick={() =>
