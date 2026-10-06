@@ -1,13 +1,16 @@
 import { upload } from "@vercel/blob/client";
-import { CompressionRequest, CompressionResponse, ImageCategory, OutputFormat } from "@/types/image";
+import { CompressionRequest, CompressionResponse, OutputFormat } from "@/types/image";
+
+export interface CompressImageOptions {
+  targetFormat: OutputFormat;
+  quality: number;
+  scalePercent?: number;
+}
 
 export async function compressImage(
   file: File,
   id: string,
-  category: ImageCategory,
-  targetFormat: OutputFormat,
-  webWidth: string,
-  webHeight: string
+  { targetFormat, quality, scalePercent }: CompressImageOptions,
 ): Promise<{
   optimizedFilename: string;
   optimizedUrl: string;
@@ -27,10 +30,9 @@ export async function compressImage(
     sourceUrl: sourceBlob.url,
     filename: normalizedName,
     mimeType: file.type,
-    category,
     targetFormat,
-    webWidth: webWidth.trim() ? Number(webWidth) : undefined,
-    webHeight: webHeight.trim() ? Number(webHeight) : undefined,
+    quality,
+    scalePercent: scalePercent && scalePercent < 100 ? scalePercent : undefined,
     uploadId: id,
   };
 
@@ -49,8 +51,10 @@ export async function compressImage(
     }
 
     finalResponse = responseData;
-  } catch {
-    throw new Error("Network error during upload");
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : "Network error during upload",
+    );
   }
 
   if (

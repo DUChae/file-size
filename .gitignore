@@ -52,3 +52,5 @@ project.md
 *.md
 
 .codebase-memory/
+# pdf.js runtime assets (copied by scripts/copy-pdfjs-assets.mjs)
+/public/pdfjs/

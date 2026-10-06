@@ -22,6 +22,74 @@ function parseWebSizeDimension(
   return Math.round(value);
 }
 
+function parseRangedInteger(
+  value: number | undefined,
+  label: string,
+  min: number,
+  max: number,
+) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw new Error(`${label} must be between ${min} and ${max}.`);
+  }
+
+  return Math.round(value);
+}
+
+// Encodes with a single user-chosen quality (1-100). 100 means lossless where the format supports it.
+function encodeWithQuality(
+  instance: sharp.Sharp,
+  outputMime: string,
+  quality: number,
+) {
+  const lossless = quality >= 100;
+
+  if (outputMime === "image/png") {
+    // libvips only emits 16- or 256-color palettes, so dithering is what actually trades
+    // size for smoothness: 30-99 ramps dither 0 -> 1 at 256 colors, below 30 drops to 16 colors.
+    return lossless
+      ? instance.png({ compressionLevel: 9, effort: 10, palette: false })
+      : instance.png({
+          colours: quality < 30 ? 16 : 256,
+          dither: quality < 30 ? 0 : (quality - 30) / 70,
+          compressionLevel: 9,
+          effort: 8,
+          palette: true,
+        });
+  }
+
+  if (outputMime === "image/webp") {
+    return instance.webp({
+      quality,
+      effort: 6,
+      smartSubsample: true,
+      lossless,
+    });
+  }
+
+  if (outputMime === "image/avif") {
+    return instance.avif({
+      quality,
+      effort: 5,
+      chromaSubsampling: quality >= 90 ? "4:4:4" : "4:2:0",
+      lossless,
+    });
+  }
+
+  if (outputMime === "image/gif") {
+    return instance.gif({
+      effort: lossless ? 9 : 7,
+      // GIF color count scales with quality (2-256 colors).
+      colours: Math.min(256, Math.max(2, Math.round((256 * quality) / 100))),
+    });
+  }
+
+  return instance.jpeg({ quality, progressive: true, mozjpeg: true });
+}
+
 export async function POST(req: NextRequest) {
   let sourceUrl: string | null = null;
   let shouldPreserveSource = false;
@@ -41,6 +109,15 @@ export async function POST(req: NextRequest) {
       uploadId,
       preserveSource,
     } = payload;
+    const quality = parseRangedInteger(payload.quality, "Quality", 1, 100);
+    const scalePercent = parseRangedInteger(
+      payload.scalePercent,
+      "Scale",
+      10,
+      100,
+    );
+    const isCustomQuality = quality !== undefined;
+    const analyticsMode = isCustomQuality ? "custom" : category;
     sourceUrl = requestSourceUrl;
     shouldPreserveSource = !!preserveSource;
 
@@ -48,7 +125,7 @@ export async function POST(req: NextRequest) {
       type: "image_job_started",
       status: "started",
       tool: "image",
-      mode: category,
+      mode: analyticsMode,
       filename,
     });
 
@@ -98,27 +175,40 @@ export async function POST(req: NextRequest) {
       outputExt = "gif";
     }
 
-    let quality = 82;
+    let presetQuality = 82;
     let resizeWidth: number | undefined;
 
     switch (category) {
       case "high-quality":
-        quality = 95;
+        presetQuality = 95;
         break;
       case "photo":
-        quality = 90;
+        presetQuality = 90;
         break;
       case "web":
-        quality = 82;
+        presetQuality = 82;
         resizeWidth = 1920;
         break;
       case "screenshot":
-        quality = 75;
+        presetQuality = 75;
         break;
     }
 
     const longSide = Math.max(metadata.width, metadata.height);
-    if (!resizeWidth) {
+    if (isCustomQuality) {
+      // User-controlled mode: keep the original resolution unless a scale is requested.
+      resizeWidth = undefined;
+      if (scalePercent !== undefined && scalePercent < 100) {
+        // metadata reports pre-rotation dimensions; EXIF orientations 5-8 swap width/height.
+        const rotatedWidth =
+          (metadata.orientation ?? 1) >= 5 ? metadata.height : metadata.width;
+        sharpInstance = sharpInstance.resize(
+          Math.max(1, Math.round((rotatedWidth * scalePercent) / 100)),
+          undefined,
+          { fit: "inside", withoutEnlargement: true },
+        );
+      }
+    } else if (!resizeWidth) {
       if (longSide >= 4000) resizeWidth = 3840;
       else if (longSide >= 3000) resizeWidth = 2560;
     }
@@ -175,7 +265,13 @@ export async function POST(req: NextRequest) {
     }
 
     let outputBuffer: Buffer;
-    if (outputMime === "image/png") {
+    if (isCustomQuality) {
+      outputBuffer = await encodeWithQuality(
+        sharpInstance,
+        outputMime,
+        quality,
+      ).toBuffer();
+    } else if (outputMime === "image/png") {
       if (category === "high-quality") {
         // High-Quality keeps full 24/32-bit truecolor for zero color loss
         outputBuffer = await sharpInstance
@@ -189,7 +285,7 @@ export async function POST(req: NextRequest) {
         // Photo, Web, Screenshot use smart palette quantization matched to their respective quality
         outputBuffer = await sharpInstance
           .png({
-            quality,
+            quality: presetQuality,
             compressionLevel: 9,
             effort: 8,
             palette: true,
@@ -200,14 +296,14 @@ export async function POST(req: NextRequest) {
     } else if (outputMime === "image/webp") {
       outputBuffer = await sharpInstance
         .webp({
-          quality,
+          quality: presetQuality,
           effort: 6,
           smartSubsample: true,
           lossless: category === "high-quality",
         })
         .toBuffer();
     } else if (outputMime === "image/avif") {
-      const avifQuality = category === "high-quality" ? 95 : Math.max(50, quality - 5);
+      const avifQuality = category === "high-quality" ? 95 : Math.max(50, presetQuality - 5);
 
       outputBuffer = await sharpInstance
         .avif({
@@ -243,7 +339,7 @@ export async function POST(req: NextRequest) {
     } else {
       outputBuffer = await sharpInstance
         .jpeg({
-          quality,
+          quality: presetQuality,
           progressive: true,
           mozjpeg: true,
         })
@@ -277,7 +373,7 @@ export async function POST(req: NextRequest) {
       type: "image_job_success",
       status: "success",
       tool: "image",
-      mode: category,
+      mode: analyticsMode,
       filename,
       fileSize: originalSize,
       optimizedSize: finalBuffer.length,

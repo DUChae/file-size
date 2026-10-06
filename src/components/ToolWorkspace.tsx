@@ -6,15 +6,11 @@ import ImageToPdfConverter from "@/components/ImageToPdfConverter";
 import PdfToPngConverter from "@/components/PdfToPngConverter";
 import UrlCaptureOptimizer from "@/components/UrlCaptureOptimizer";
 import ImageBgRemover from "@/components/ImageBgRemover";
-import { ImageCategory } from "@/types/image";
+import PdfCompressor from "@/components/PdfCompressor";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Package,
   RefreshCcw,
-  Layout,
-  Image as ImageIcon,
-  Globe,
-  ShieldCheck,
   FileType,
   FileOutput,
   Layers,
@@ -22,51 +18,20 @@ import {
   Camera,
   Files,
   Sparkles,
+  FileDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Category = "compressing" | "converter" | "url-capture" | "bg-removal";
-type ToolMode = ImageCategory | "pdf-to-png" | "image-to-pdf" | "webp" | "avif";
-
-const COMPRESSING_MODES: Array<{
-  id: ImageCategory;
-  label: string;
-  description: string;
-  qualityBadge: string;
-  icon: React.ReactNode;
-}> = [
-  {
-    id: "high-quality",
-    label: "고품질",
-    description: "원형 보전 무손실 압축",
-    qualityBadge: "Quality 95",
-    icon: <ShieldCheck className="w-4 h-4" />,
-  },
-  {
-    id: "photo",
-    label: "사진",
-    description: "디테일 & 색감 보존",
-    qualityBadge: "Quality 90",
-    icon: <ImageIcon className="w-4 h-4" />,
-  },
-  {
-    id: "web",
-    label: "웹 엔진",
-    description: "웹 로딩 최적화",
-    qualityBadge: "Quality 82",
-    icon: <Globe className="w-4 h-4" />,
-  },
-  {
-    id: "screenshot",
-    label: "스크린샷",
-    description: "텍스트 경계선 고압축",
-    qualityBadge: "Quality 75",
-    icon: <Layout className="w-4 h-4" />,
-  },
-];
+type Category =
+  | "compressing"
+  | "pdf-compress"
+  | "converter"
+  | "url-capture"
+  | "bg-removal";
+type ConverterMode = "pdf-to-png" | "image-to-pdf" | "webp" | "avif";
 
 const CONVERTER_MODES: Array<{
-  id: "pdf-to-png" | "image-to-pdf" | "webp" | "avif";
+  id: ConverterMode;
   label: string;
   description: string;
   icon: React.ReactNode;
@@ -99,18 +64,10 @@ const CONVERTER_MODES: Array<{
 
 export default function ToolWorkspace() {
   const [category, setCategory] = useState<Category>("compressing");
-  const [mode, setMode] = useState<ToolMode>("screenshot");
+  const [mode, setMode] = useState<ConverterMode>("pdf-to-png");
 
   const handleCategoryChange = (newCat: string) => {
-    const cat = newCat as Category;
-    setCategory(cat);
-    if (cat === "compressing") {
-      setMode("screenshot");
-    } else if (cat === "converter") {
-      setMode("pdf-to-png");
-    } else if (cat === "bg-removal") {
-      setMode("screenshot");
-    }
+    setCategory(newCat as Category);
   };
 
   return (
@@ -154,6 +111,13 @@ export default function ToolWorkspace() {
               이미지 압축
             </TabsTrigger>
             <TabsTrigger
+              value="pdf-compress"
+              className="rounded-xl px-6 text-sm font-bold text-slate-400 data-[state=active]:bg-white data-[state=active]:text-black transition-all"
+            >
+              <FileDown className="w-4 h-4 mr-2" />
+              PDF 압축
+            </TabsTrigger>
+            <TabsTrigger
               value="converter"
               className="rounded-xl px-6 text-sm font-bold text-slate-400 data-[state=active]:bg-white data-[state=active]:text-black transition-all"
             >
@@ -180,12 +144,9 @@ export default function ToolWorkspace() {
         {/* Command Center Layout */}
         <div className="grid grid-cols-1 gap-1 border-t border-white/10 pt-10">
           {/* Sub-mode Selector - Minimalist Pill Buttons */}
-          {category !== "url-capture" && category !== "bg-removal" && (
+          {category === "converter" && (
             <div className="flex flex-wrap gap-3 mb-14">
-              {(category === "compressing"
-                ? COMPRESSING_MODES
-                : CONVERTER_MODES
-              ).map((option) => (
+              {CONVERTER_MODES.map((option) => (
                 <button
                   key={option.id}
                   onClick={() => setMode(option.id)}
@@ -198,18 +159,6 @@ export default function ToolWorkspace() {
                 >
                   {option.icon}
                   <span>{option.label}</span>
-                  {"qualityBadge" in option && (
-                    <span
-                      className={cn(
-                        "text-[10px] font-black px-2 py-0.5 rounded-full border transition-all ml-0.5",
-                        mode === option.id
-                          ? "bg-black/10 border-black/20 text-black"
-                          : "bg-teal-300/[0.08] border-teal-300/20 text-teal-300"
-                      )}
-                    >
-                      {option.qualityBadge}
-                    </span>
-                  )}
                 </button>
               ))}
             </div>
@@ -222,16 +171,15 @@ export default function ToolWorkspace() {
             ) : category === "bg-removal" ? (
               <ImageBgRemover />
             ) : category === "compressing" ? (
-              <ImageOptimizer category={mode as ImageCategory} />
+              <ImageOptimizer />
+            ) : category === "pdf-compress" ? (
+              <PdfCompressor />
             ) : mode === "pdf-to-png" ? (
               <PdfToPngConverter />
             ) : mode === "image-to-pdf" ? (
               <ImageToPdfConverter />
             ) : (
-              <ImageOptimizer
-                category="photo"
-                forcedFormat={mode as "webp" | "avif"}
-              />
+              <ImageOptimizer forcedFormat={mode as "webp" | "avif"} />
             )}
           </div>
         </div>

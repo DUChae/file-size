@@ -18,10 +18,15 @@ export interface QueueItem {
   reductionRate?: number;
   status: QueueStatus;
   error?: string;
-  category: ImageCategory;
+  category?: ImageCategory;
   targetFormat: OutputFormat;
   webWidth: string;
   webHeight: string;
+  quality?: number;
+  // Per-file resize override (percent). Undefined follows the global scale.
+  customScale?: number;
+  width?: number;
+  height?: number;
   optimizedFilename?: string;
   optimizedUrl?: string;
   optimizedDownloadUrl?: string;
@@ -34,8 +39,13 @@ export interface CompressionRequest {
   sourceUrl: string;
   filename: string;
   mimeType: string;
-  category: ImageCategory;
+  // Legacy presets used by URL capture / background removal. Ignored when `quality` is set.
+  category?: ImageCategory;
   targetFormat: OutputFormat;
+  // 1-100. When present, encoding uses this value and the original resolution is kept.
+  quality?: number;
+  // 10-100. Resizes by percent of the (EXIF-rotated) source width, keeping aspect ratio.
+  scalePercent?: number;
   webWidth?: number;
   webHeight?: number;
   webX?: number;
