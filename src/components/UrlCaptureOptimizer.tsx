@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import {
@@ -19,12 +19,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  CompressionRequest,
-  CompressionResponse,
-  OutputFormat,
-  UrlCaptureResponse,
-} from "@/types/image";
+import { OutputFormat, UrlCaptureResponse } from "@/types/image";
+import { requestCompression } from "@/utils/compression";
 
 type CaptureStatus = "idle" | "capturing" | "captured" | "compressing" | "done" | "error";
 
@@ -103,6 +99,21 @@ export default function UrlCaptureOptimizer() {
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   const activeItem = urls.find((item) => item.id === activeItemId);
+
+  // Compressed results are blob: URLs; release the ones that are replaced or removed,
+  // and whatever is left when the component unmounts.
+  const liveUrlsRef = useRef(new Set<string>());
+  useEffect(() => {
+    const current = new Set(urls.flatMap((item) => (item.result ? [item.result.url] : [])));
+    liveUrlsRef.current.forEach((url) => {
+      if (!current.has(url)) URL.revokeObjectURL(url);
+    });
+    liveUrlsRef.current = current;
+  }, [urls]);
+  useEffect(() => {
+    const liveUrls = liveUrlsRef;
+    return () => liveUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   const addUrl = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -183,35 +194,24 @@ export default function UrlCaptureOptimizer() {
   };
 
   const handleCompress = async (item: CaptureItem) => {
-    if (!item.captureData?.sourceUrl || !item.captureData.filename || !item.captureData.captureId) return;
+    if (!item.captureData?.filename || !item.captureData.captureId) return;
 
     updateItem(item.id, { status: "compressing", error: undefined, result: undefined });
 
-    const payload: CompressionRequest = {
-      sourceUrl: item.captureData.sourceUrl,
-      filename: item.captureData.filename,
-      mimeType: item.captureData.mimeType || "image/png",
-      category: "screenshot",
-      targetFormat: globalFormat,
-      webWidth: item.targetWidth,
-      webHeight: item.targetHeight,
-      webX: item.targetX,
-      webY: item.targetY,
-      uploadId: item.captureData.captureId,
-      preserveSource: true,
-    };
-
     try {
-      const response = await fetch("/api/compress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = (await response.json()) as CompressionResponse;
-
-      if (!response.ok || !data.success || !data.outputUrl || !data.outputDownloadUrl || !data.optimizedSize) {
-        throw new Error(data.error || "Compression failed.");
-      }
+      const res = await requestCompression(
+        { captureId: item.captureData.captureId },
+        {
+          filename: item.captureData.filename,
+          mimeType: item.captureData.mimeType || "image/png",
+          category: "screenshot",
+          targetFormat: globalFormat,
+          webWidth: item.targetWidth,
+          webHeight: item.targetHeight,
+          webX: item.targetX,
+          webY: item.targetY,
+        },
+      );
 
       const displayFilename = item.displayUrl + `.${globalFormat}`;
 
@@ -219,10 +219,10 @@ export default function UrlCaptureOptimizer() {
         status: "done",
         result: {
           filename: displayFilename,
-          url: data.outputUrl,
-          downloadUrl: data.outputDownloadUrl,
-          originalSize: data.originalSize,
-          optimizedSize: data.optimizedSize,
+          url: res.optimizedUrl,
+          downloadUrl: res.optimizedDownloadUrl,
+          originalSize: res.originalSize,
+          optimizedSize: res.optimizedSize,
         }
       });
     } catch (err) {
