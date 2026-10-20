@@ -1,8 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
-import { del, put } from "@vercel/blob";
 import sharp from "sharp";
-import { CompressionRequest, CompressionResponse } from "@/types/image";
+import { CompressionOptions, CompressionResponse } from "@/types/image";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { CaptureNotFoundError, isCaptureId, readCapture } from "@/lib/captureStorage";
+
+class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+function parseOptions(value: FormDataEntryValue | null): CompressionOptions {
+  if (typeof value !== "string") {
+    throw new RequestError("Missing compression options.", 400);
+  }
+
+  let options: unknown;
+  try {
+    options = JSON.parse(value);
+  } catch {
+    throw new RequestError("Compression options must be valid JSON.", 400);
+  }
+
+  const candidate = options as Partial<CompressionOptions> | null;
+  if (
+    !candidate ||
+    typeof candidate.filename !== "string" ||
+    typeof candidate.mimeType !== "string" ||
+    typeof candidate.targetFormat !== "string"
+  ) {
+    throw new RequestError("filename, mimeType and targetFormat are required.", 400);
+  }
+
+  return candidate as CompressionOptions;
+}
+
+// The source is either an uploaded file or a URL capture that is already on disk.
+async function readSource(form: FormData) {
+  const file = form.get("file");
+  if (file instanceof File) {
+    return Buffer.from(await file.arrayBuffer());
+  }
+
+  const captureId = form.get("captureId");
+  if (captureId !== null) {
+    if (!isCaptureId(captureId)) {
+      throw new RequestError("Invalid capture id.", 400);
+    }
+    try {
+      return await readCapture(captureId);
+    } catch (error) {
+      if (error instanceof CaptureNotFoundError) {
+        throw new RequestError(error.message, 404);
+      }
+      throw error;
+    }
+  }
+
+  throw new RequestError("Either file or captureId is required.", 400);
+}
 
 function parseWebSizeDimension(
   value: number | undefined,
@@ -91,13 +150,15 @@ function encodeWithQuality(
 }
 
 export async function POST(req: NextRequest) {
-  let sourceUrl: string | null = null;
-  let shouldPreserveSource = false;
-
   try {
-    const payload: CompressionRequest = await req.json();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      throw new RequestError("Request body must be multipart/form-data.", 400);
+    }
+
     const {
-      sourceUrl: requestSourceUrl,
       filename,
       mimeType,
       category,
@@ -106,20 +167,17 @@ export async function POST(req: NextRequest) {
       webHeight,
       webX,
       webY,
-      uploadId,
-      preserveSource,
-    } = payload;
-    const quality = parseRangedInteger(payload.quality, "Quality", 1, 100);
+      ...options
+    } = parseOptions(form.get("options"));
+    const quality = parseRangedInteger(options.quality, "Quality", 1, 100);
     const scalePercent = parseRangedInteger(
-      payload.scalePercent,
+      options.scalePercent,
       "Scale",
       10,
       100,
     );
     const isCustomQuality = quality !== undefined;
     const analyticsMode = isCustomQuality ? "custom" : category;
-    sourceUrl = requestSourceUrl;
-    shouldPreserveSource = !!preserveSource;
 
     await trackAnalyticsEvent({
       type: "image_job_started",
@@ -129,13 +187,7 @@ export async function POST(req: NextRequest) {
       filename,
     });
 
-    const sourceResponse = await fetch(sourceUrl);
-    if (!sourceResponse.ok) {
-      throw new Error("Failed to fetch source image");
-    }
-
-    const sourceArrayBuffer = await sourceResponse.arrayBuffer();
-    const inputBuffer = Buffer.from(sourceArrayBuffer);
+    const inputBuffer = await readSource(form);
     const originalSize = inputBuffer.length;
 
     const isGif =
@@ -354,20 +406,11 @@ export async function POST(req: NextRequest) {
       safeBaseName = "optimized";
     }
     const outputFilename = `${safeBaseName}.${outputExt}`;
-    const outputPathname = `optimized/${uploadId}/${outputFilename}`;
 
     const finalBuffer =
       outputMime === mimeType && outputBuffer.length >= originalSize
         ? inputBuffer
         : outputBuffer;
-
-    const blob = await put(outputPathname, finalBuffer, {
-      access: "public",
-      contentType: outputMime,
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      multipart: finalBuffer.length > 5 * 1024 * 1024,
-    });
 
     await trackAnalyticsEvent({
       type: "image_job_success",
@@ -379,18 +422,19 @@ export async function POST(req: NextRequest) {
       optimizedSize: finalBuffer.length,
     });
 
-    if (!shouldPreserveSource) {
-      await del(sourceUrl);
-      sourceUrl = null;
-    }
-
-    return NextResponse.json<CompressionResponse>({
-      success: true,
-      originalSize,
-      optimizedSize: finalBuffer.length,
-      outputFilename,
-      outputUrl: blob.url,
-      outputDownloadUrl: blob.downloadUrl,
+    return new NextResponse(new Uint8Array(finalBuffer), {
+      headers: {
+        "Content-Type": outputMime,
+        "Content-Length": String(finalBuffer.length),
+        "X-Original-Size": String(originalSize),
+        "X-Optimized-Size": String(finalBuffer.length),
+        "X-Output-Filename": encodeURIComponent(outputFilename),
+        // The page reads this with fetch(); if the URL is ever opened directly (e.g. a
+        // cross-site form post), the browser downloads it instead of rendering it on our origin.
+        "Content-Disposition": "attachment",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      },
     });
   } catch (error) {
     console.error("Compression error:", error);
@@ -402,22 +446,12 @@ export async function POST(req: NextRequest) {
       error: error instanceof Error ? error.message : "Internal server error",
     });
 
-    if (sourceUrl && !shouldPreserveSource) {
-      try {
-        await del(sourceUrl);
-      } catch {
-        // Ignore cleanup failures.
-      }
-    }
-
     return NextResponse.json<CompressionResponse>(
       {
         success: false,
         error: error instanceof Error ? error.message : "Internal server error",
-        originalSize: 0,
-        outputFilename: "",
       },
-      { status: 500 },
+      { status: error instanceof RequestError ? error.status : 500 },
     );
   }
 }
