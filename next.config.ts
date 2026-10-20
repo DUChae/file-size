@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   images: { unoptimized: true },
-  serverExternalPackages: ["@huggingface/transformers", "@gradio/client", "onnxruntime-node", "sharp"],
+  serverExternalPackages: ["@gradio/client", "sharp"],
   async headers() {
     return [
       {

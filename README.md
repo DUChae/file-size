@@ -14,7 +14,8 @@
 
 - **Core:** Next.js 16 (App Router), TypeScript, React 19
 - **Processing:** Sharp (Image), PDF.js (PDF), JSZip
-- **Storage/DB:** Vercel Blob (Media), Upstash Redis (Analytics/Feedback)
+- **Storage/DB:** PostgreSQL 16 (Analytics/Feedback), 로컬 볼륨 (URL 캡처 임시 파일)
+- **Infra:** Docker (Next.js standalone), Caddy 리버스 프록시
 - **Styling/UI:** Tailwind CSS 4, Recharts, Lucide React
 
 ## 4. 핵심 기능
@@ -39,9 +40,10 @@ git clone <https://github.com/your-username/optistream.git>
 npm install
 
 # 환경 변수 설정 (.env.local)
-# BLOB_READ_WRITE_TOKEN=
-# UPSTASH_REDIS_REST_URL=
-# UPSTASH_REDIS_REST_TOKEN=
+# DATABASE_URL=postgres://user:password@localhost:5432/file_size   # 없으면 통계·피드백 비활성
+# SCREENSHOTONE_ACCESS_KEY=                                         # URL 캡처
+# HUGGINGFACE_API_KEY=                                              # 배경 제거
+# STORAGE_DIR=                                                      # 캡처 저장 위치 (기본: ./.data)
 
 # 개발 서버 실행
 npm run dev
