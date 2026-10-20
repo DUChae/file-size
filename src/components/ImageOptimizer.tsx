@@ -3,18 +3,12 @@ import { QueueItem, QueueStatus, OutputFormat } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
 import {
-  dropImageInFigma,
-  isInsideFigma,
-  sendImageToFigma,
-} from "@/utils/figmaBridge";
-import {
   Upload,
   Download,
   X,
   Loader2,
   Info,
   Image as ImageIcon,
-  Sparkles,
   Play,
   RotateCcw,
 } from "lucide-react";
@@ -521,30 +515,7 @@ export default function ImageOptimizer({
                 return (
                   <div
                     key={item.id}
-                    draggable={isInsideFigma() && item.status === "done"}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "copy";
-                      event.dataTransfer.setData(
-                        "text/plain",
-                        item.originalFile.name,
-                      );
-                    }}
-                    onDragEnd={(event) => {
-                      if (!item.optimizedUrl || !event.view) return;
-
-                      void dropImageInFigma(
-                        item.optimizedUrl,
-                        item.optimizedFilename || "image.png",
-                        event.clientX,
-                        event.clientY,
-                      );
-                    }}
-                    className={cn(
-                      "p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors",
-                      isInsideFigma() &&
-                        item.status === "done" &&
-                        "cursor-grab active:cursor-grabbing",
-                    )}
+                    className="p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors"
                   >
                     <div className="flex-1 min-w-0 flex items-center gap-8">
                       <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 shadow-inner group-hover:border-white/20 transition-colors">
@@ -637,26 +608,6 @@ export default function ImageOptimizer({
                     <div className="flex items-center justify-center gap-2 min-w-[48px]">
                       {item.status === "done" ? (
                         <>
-                          {isInsideFigma() && (
-                            <button
-                              onClick={async () => {
-                                if (item.optimizedUrl) {
-                                  const response = await fetch(
-                                    item.optimizedUrl,
-                                  );
-                                  const blob = await response.blob();
-                                  await sendImageToFigma(
-                                    blob,
-                                    item.optimizedFilename || "image.png",
-                                  );
-                                }
-                              }}
-                              className="w-12 h-12 rounded-full border border-teal-300/30 bg-teal-300/10 text-teal-300 flex items-center justify-center hover:bg-teal-300 hover:text-black transition-all shadow-lg active:scale-90"
-                              title="Figma에 반영"
-                            >
-                              <Sparkles className="w-5 h-5" />
-                            </button>
-                          )}
                           <button
                             onClick={() => downloadSingle(item)}
                             className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black transition-all shadow-lg group-hover:scale-110 active:scale-90"
