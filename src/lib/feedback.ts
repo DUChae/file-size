@@ -1,7 +1,6 @@
-import { redis } from "@/lib/redis";
+import { db, query } from "@/lib/db";
 import { unstable_noStore as noStore } from "next/cache";
 
-const FEEDBACK_LIST_KEY = "feedback:submissions";
 const MAX_FEEDBACK_ITEMS = 200;
 
 export interface FeedbackSubmission {
@@ -12,28 +11,21 @@ export interface FeedbackSubmission {
   createdAt: string;
 }
 
-function isFeedbackSubmission(value: unknown): value is FeedbackSubmission {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    (candidate.type === "bug" || candidate.type === "improvement") &&
-    typeof candidate.title === "string" &&
-    typeof candidate.details === "string" &&
-    typeof candidate.createdAt === "string"
-  );
+interface FeedbackRow {
+  id: string;
+  type: "bug" | "improvement";
+  title: string;
+  details: string;
+  created_at: Date;
 }
 
 export function getFeedbackStorageMode() {
-  return redis ? "redis" : "unconfigured";
+  return db ? "postgres" : "unconfigured";
 }
 
 export async function addFeedbackSubmission(entry: FeedbackSubmission) {
-  if (!redis) {
-    console.error("[feedback] addFeedbackSubmission failed: Redis is not configured");
+  if (!db) {
+    console.error("[feedback] addFeedbackSubmission failed: database is not configured");
     throw new Error("Feedback storage is not configured.");
   }
 
@@ -45,32 +37,25 @@ export async function addFeedbackSubmission(entry: FeedbackSubmission) {
     createdAt: entry.createdAt,
   });
 
-  await redis.lpush(FEEDBACK_LIST_KEY, JSON.stringify(entry));
-  await redis.ltrim(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
+  await query(
+    "INSERT INTO feedback (id, type, title, details, created_at) VALUES ($1, $2, $3, $4, $5)",
+    [entry.id, entry.type, entry.title, entry.details, entry.createdAt],
+  );
   console.log("[feedback] submission saved", { id: entry.id });
 }
 
 export async function deleteFeedbackSubmission(id: string) {
-  if (!redis) {
-    console.error("[feedback] deleteFeedbackSubmission failed: Redis is not configured");
+  if (!db) {
+    console.error("[feedback] deleteFeedbackSubmission failed: database is not configured");
     throw new Error("Feedback storage is not configured.");
   }
 
   console.log("[feedback] deleting submission", { id });
-  const submissions = await getFeedbackSubmissions();
-  const nextSubmissions = submissions.filter((submission) => submission.id !== id);
+  const result = await query("DELETE FROM feedback WHERE id = $1", [id]);
 
-  if (nextSubmissions.length === submissions.length) {
+  if (!result.rowCount) {
     console.warn("[feedback] delete target not found", { id });
     return false;
-  }
-
-  await redis.del(FEEDBACK_LIST_KEY);
-  if (nextSubmissions.length > 0) {
-    await redis.rpush(
-      FEEDBACK_LIST_KEY,
-      ...nextSubmissions.map((submission) => JSON.stringify(submission)),
-    );
   }
 
   console.log("[feedback] submission deleted", { id });
@@ -80,38 +65,23 @@ export async function deleteFeedbackSubmission(id: string) {
 export async function getFeedbackSubmissions(): Promise<FeedbackSubmission[]> {
   noStore();
 
-  if (!redis) {
-    console.error("[feedback] getFeedbackSubmissions failed: Redis is not configured");
+  if (!db) {
+    console.error("[feedback] getFeedbackSubmissions failed: database is not configured");
     return [];
   }
 
   console.log("[feedback] loading submissions");
-  const entries = await redis.lrange(FEEDBACK_LIST_KEY, 0, MAX_FEEDBACK_ITEMS - 1);
-  console.log("[feedback] raw submission count", {
-    count: entries?.length ?? 0,
-    firstEntryType: entries?.[0] === undefined ? "undefined" : typeof entries[0],
-  });
+  const result = await query<FeedbackRow>(
+    "SELECT id, type, title, details, created_at FROM feedback ORDER BY created_at DESC LIMIT $1",
+    [MAX_FEEDBACK_ITEMS],
+  );
+  console.log("[feedback] submission count", { count: result.rows.length });
 
-  return (entries ?? [])
-    .map((entry) => {
-      try {
-        if (isFeedbackSubmission(entry)) {
-          return entry;
-        }
-
-        if (typeof entry === "string") {
-          const parsed = JSON.parse(entry) as unknown;
-          return isFeedbackSubmission(parsed) ? parsed : null;
-        }
-
-        console.error("[feedback] unsupported submission entry type", {
-          type: typeof entry,
-        });
-        return null;
-      } catch {
-        console.error("[feedback] failed to parse submission entry");
-        return null;
-      }
-    })
-    .filter((entry): entry is FeedbackSubmission => entry !== null);
+  return result.rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    details: row.details,
+    createdAt: row.created_at.toISOString(),
+  }));
 }
