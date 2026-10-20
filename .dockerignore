@@ -1,0 +1,14 @@
+.git
+node_modules
+.next
+.vercel
+.data
+.env*
+*.md
+figma-plugin
+public/pdfjs
+compose.*.yaml
+Dockerfile
+.dockerignore
+*.tsbuildinfo
+next-env.d.ts
