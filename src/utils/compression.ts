@@ -1,5 +1,4 @@
-import { upload } from "@vercel/blob/client";
-import { CompressionRequest, CompressionResponse, OutputFormat } from "@/types/image";
+import { CompressionOptions, CompressionResponse, OutputFormat } from "@/types/image";
 
 export interface CompressImageOptions {
   targetFormat: OutputFormat;
@@ -7,69 +6,74 @@ export interface CompressImageOptions {
   scalePercent?: number;
 }
 
-export async function compressImage(
-  file: File,
-  id: string,
-  { targetFormat, quality, scalePercent }: CompressImageOptions,
-): Promise<{
+export interface CompressedImage {
   optimizedFilename: string;
+  // A blob: URL owned by the caller; release it with URL.revokeObjectURL when done.
   optimizedUrl: string;
   optimizedDownloadUrl: string;
   originalSize: number;
   optimizedSize: number;
-}> {
-  const normalizedName = file.name.normalize("NFC");
-  const sourceBlob = await upload(`uploads/${id}-${normalizedName}`, file, {
-    access: "public",
-    contentType: file.type,
-    handleUploadUrl: "/api/upload",
-    multipart: file.size > 5 * 1024 * 1024,
-  });
+}
 
-  const payload: CompressionRequest = {
-    sourceUrl: sourceBlob.url,
-    filename: normalizedName,
-    mimeType: file.type,
-    targetFormat,
-    quality,
-    scalePercent: scalePercent && scalePercent < 100 ? scalePercent : undefined,
-    uploadId: id,
-  };
+// Posts the source to /api/compress, which answers with the compressed image itself.
+// `source` is either a File or the id of a URL capture already stored on the server.
+export async function requestCompression(
+  source: { file: File } | { captureId: string },
+  options: CompressionOptions,
+): Promise<CompressedImage> {
+  const body = new FormData();
+  if ("file" in source) {
+    body.append("file", source.file);
+  } else {
+    body.append("captureId", source.captureId);
+  }
+  body.append("options", JSON.stringify(options));
 
-  let finalResponse: CompressionResponse;
-
+  let response: Response;
   try {
-    const response = await fetch("/api/compress", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    response = await fetch("/api/compress", { method: "POST", body });
+  } catch {
+    throw new Error("Network error during compression");
+  }
 
-    const responseData = (await response.json()) as CompressionResponse;
-    if (!response.ok || !responseData.success) {
-      throw new Error(responseData.error || "Compression failed");
+  if (!response.ok) {
+    let message = "Compression failed";
+    try {
+      const data = (await response.json()) as CompressionResponse;
+      message = data.error || message;
+    } catch {
+      // Non-JSON error body (e.g. a proxy error page).
     }
-
-    finalResponse = responseData;
-  } catch (error) {
-    throw new Error(
-      error instanceof Error ? error.message : "Network error during upload",
-    );
+    throw new Error(message);
   }
 
-  if (
-    !finalResponse.outputUrl ||
-    !finalResponse.outputDownloadUrl ||
-    !finalResponse.optimizedSize
-  ) {
-    throw new Error(finalResponse.error || "Compression failed");
-  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const encodedFilename = response.headers.get("X-Output-Filename");
 
   return {
-    optimizedFilename: finalResponse.outputFilename,
-    optimizedUrl: finalResponse.outputUrl,
-    optimizedDownloadUrl: finalResponse.outputDownloadUrl,
-    originalSize: finalResponse.originalSize,
-    optimizedSize: finalResponse.optimizedSize,
+    optimizedFilename: encodedFilename
+      ? decodeURIComponent(encodedFilename)
+      : options.filename,
+    optimizedUrl: objectUrl,
+    optimizedDownloadUrl: objectUrl,
+    originalSize: Number(response.headers.get("X-Original-Size")),
+    optimizedSize: Number(response.headers.get("X-Optimized-Size")) || blob.size,
   };
+}
+
+export async function compressImage(
+  file: File,
+  { targetFormat, quality, scalePercent }: CompressImageOptions,
+): Promise<CompressedImage> {
+  return requestCompression(
+    { file },
+    {
+      filename: file.name.normalize("NFC"),
+      mimeType: file.type,
+      targetFormat,
+      quality,
+      scalePercent: scalePercent && scalePercent < 100 ? scalePercent : undefined,
+    },
+  );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem, QueueStatus, OutputFormat } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
@@ -94,6 +94,23 @@ export default function ImageOptimizer({
   const [globalScale, setGlobalScale] = useState(DEFAULT_SCALE);
   const [isRunning, setIsRunning] = useState(false);
 
+  // Results are blob: URLs; release the ones that leave the queue (re-compression,
+  // removal, CLEAR) and whatever is left when the component unmounts.
+  const liveUrlsRef = useRef(new Set<string>());
+  useEffect(() => {
+    const current = new Set(
+      queue.flatMap((item) => (item.optimizedUrl ? [item.optimizedUrl] : [])),
+    );
+    liveUrlsRef.current.forEach((url) => {
+      if (!current.has(url)) URL.revokeObjectURL(url);
+    });
+    liveUrlsRef.current = current;
+  }, [queue]);
+  useEffect(() => {
+    const liveUrls = liveUrlsRef;
+    return () => liveUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
+
   const updateItem = useCallback(
     (id: string, patch: Partial<QueueItem>) =>
       setQueue((q) => q.map((it) => (it.id === id ? { ...it, ...patch } : it))),
@@ -142,8 +159,7 @@ export default function ImageOptimizer({
     async ({ item, scalePercent }: CompressionJob) => {
       updateItem(item.id, { status: "compressing" });
       try {
-        // A fresh upload id per run keeps re-compression from colliding with earlier blobs.
-        const res = await compressImage(item.originalFile, createId(), {
+        const res = await compressImage(item.originalFile, {
           targetFormat: item.targetFormat,
           quality: item.quality ?? DEFAULT_QUALITY,
           scalePercent,
