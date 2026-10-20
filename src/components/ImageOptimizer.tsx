@@ -1,12 +1,7 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem, QueueStatus, OutputFormat } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
-import {
-  dropImageInFigma,
-  isInsideFigma,
-  sendImageToFigma,
-} from "@/utils/figmaBridge";
 import {
   Upload,
   Download,
@@ -14,7 +9,6 @@ import {
   Loader2,
   Info,
   Image as ImageIcon,
-  Sparkles,
   Play,
   RotateCcw,
 } from "lucide-react";
@@ -94,6 +88,23 @@ export default function ImageOptimizer({
   const [globalScale, setGlobalScale] = useState(DEFAULT_SCALE);
   const [isRunning, setIsRunning] = useState(false);
 
+  // Results are blob: URLs; release the ones that leave the queue (re-compression,
+  // removal, CLEAR) and whatever is left when the component unmounts.
+  const liveUrlsRef = useRef(new Set<string>());
+  useEffect(() => {
+    const current = new Set(
+      queue.flatMap((item) => (item.optimizedUrl ? [item.optimizedUrl] : [])),
+    );
+    liveUrlsRef.current.forEach((url) => {
+      if (!current.has(url)) URL.revokeObjectURL(url);
+    });
+    liveUrlsRef.current = current;
+  }, [queue]);
+  useEffect(() => {
+    const liveUrls = liveUrlsRef;
+    return () => liveUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
+
   const updateItem = useCallback(
     (id: string, patch: Partial<QueueItem>) =>
       setQueue((q) => q.map((it) => (it.id === id ? { ...it, ...patch } : it))),
@@ -142,8 +153,7 @@ export default function ImageOptimizer({
     async ({ item, scalePercent }: CompressionJob) => {
       updateItem(item.id, { status: "compressing" });
       try {
-        // A fresh upload id per run keeps re-compression from colliding with earlier blobs.
-        const res = await compressImage(item.originalFile, createId(), {
+        const res = await compressImage(item.originalFile, {
           targetFormat: item.targetFormat,
           quality: item.quality ?? DEFAULT_QUALITY,
           scalePercent,
@@ -505,30 +515,7 @@ export default function ImageOptimizer({
                 return (
                   <div
                     key={item.id}
-                    draggable={isInsideFigma() && item.status === "done"}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "copy";
-                      event.dataTransfer.setData(
-                        "text/plain",
-                        item.originalFile.name,
-                      );
-                    }}
-                    onDragEnd={(event) => {
-                      if (!item.optimizedUrl || !event.view) return;
-
-                      void dropImageInFigma(
-                        item.optimizedUrl,
-                        item.optimizedFilename || "image.png",
-                        event.clientX,
-                        event.clientY,
-                      );
-                    }}
-                    className={cn(
-                      "p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors",
-                      isInsideFigma() &&
-                        item.status === "done" &&
-                        "cursor-grab active:cursor-grabbing",
-                    )}
+                    className="p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors"
                   >
                     <div className="flex-1 min-w-0 flex items-center gap-8">
                       <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 shadow-inner group-hover:border-white/20 transition-colors">
@@ -621,26 +608,6 @@ export default function ImageOptimizer({
                     <div className="flex items-center justify-center gap-2 min-w-[48px]">
                       {item.status === "done" ? (
                         <>
-                          {isInsideFigma() && (
-                            <button
-                              onClick={async () => {
-                                if (item.optimizedUrl) {
-                                  const response = await fetch(
-                                    item.optimizedUrl,
-                                  );
-                                  const blob = await response.blob();
-                                  await sendImageToFigma(
-                                    blob,
-                                    item.optimizedFilename || "image.png",
-                                  );
-                                }
-                              }}
-                              className="w-12 h-12 rounded-full border border-teal-300/30 bg-teal-300/10 text-teal-300 flex items-center justify-center hover:bg-teal-300 hover:text-black transition-all shadow-lg active:scale-90"
-                              title="Figma에 반영"
-                            >
-                              <Sparkles className="w-5 h-5" />
-                            </button>
-                          )}
                           <button
                             onClick={() => downloadSingle(item)}
                             className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black transition-all shadow-lg group-hover:scale-110 active:scale-90"

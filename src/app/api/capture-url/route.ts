@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
-import { randomUUID } from "crypto";
 import { lookup } from "dns/promises";
 import net from "net";
 import sharp from "sharp";
 import { UrlCaptureResponse } from "@/types/image";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { cleanupExpiredCaptures, saveCapture } from "@/lib/captureStorage";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
 
 const MAX_CAPTURE_HEIGHT = 30000;
 const MINUTE_LIMIT = 20;
@@ -193,6 +191,11 @@ async function fetchScreenshotWithProtocolFallback(accessKey: string, captureUrl
 }
 
 export async function POST(request: NextRequest) {
+  // Fire-and-forget: the response does not wait for old captures to be removed.
+  cleanupExpiredCaptures().catch((error) => {
+    console.error("[captures] cleanup failed", error);
+  });
+
   try {
     const accessKey = process.env.SCREENSHOTONE_ACCESS_KEY;
     if (!accessKey) {
@@ -206,7 +209,11 @@ export async function POST(request: NextRequest) {
     // Smart detection for iframe-only wrappers (common in Korean web agencies like i-web.kr)
     let captureUrlString = targetUrl.href;
     try {
-      const probeResponse = await fetch(targetUrl.href, { next: { revalidate: 0 } });
+      // Only the validated URL is probed: following a redirect could reach internal hosts.
+      const probeResponse = await fetch(targetUrl.href, {
+        cache: "no-store",
+        redirect: "manual",
+      });
       const html = await probeResponse.text();
       // If it's a small wrapper page with an iframe, target the iframe source instead
       if (html.length < 10000 && html.includes("<iframe")) {
@@ -253,15 +260,8 @@ export async function POST(request: NextRequest) {
       outputHeight = MAX_CAPTURE_HEIGHT;
     }
 
-    const captureId = randomUUID();
     const filename = makeSafeFilename(targetUrl);
-    const blob = await put(`captures/${captureId}/${filename}`, outputBuffer, {
-      access: "public",
-      contentType: "image/png",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      multipart: outputBuffer.length > 5 * 1024 * 1024,
-    });
+    const captureId = await saveCapture(outputBuffer);
 
     await trackAnalyticsEvent({
       type: "image_job_success",
@@ -274,8 +274,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json<UrlCaptureResponse>({
       success: true,
-      sourceUrl: blob.url,
-      downloadUrl: blob.downloadUrl,
+      sourceUrl: `/api/captures/${captureId}`,
+      downloadUrl: `/api/captures/${captureId}?download=${encodeURIComponent(filename)}`,
       filename,
       mimeType: "image/png",
       size: outputBuffer.length,

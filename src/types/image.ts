@@ -35,8 +35,8 @@ export interface QueueItem {
   removalMode?: "auto" | "ai" | "color";
 }
 
-export interface CompressionRequest {
-  sourceUrl: string;
+// Sent to /api/compress as the `options` field (JSON) next to either `file` or `captureId`.
+export interface CompressionOptions {
   filename: string;
   mimeType: string;
   // Legacy presets used by URL capture / background removal. Ignored when `quality` is set.
@@ -50,18 +50,12 @@ export interface CompressionRequest {
   webHeight?: number;
   webX?: number;
   webY?: number;
-  uploadId: string;
-  preserveSource?: boolean;
 }
 
+// /api/compress returns the image itself on success; JSON is only used for errors.
 export interface CompressionResponse {
-  success: boolean;
-  error?: string;
-  originalSize: number;
-  optimizedSize?: number;
-  outputFilename: string;
-  outputUrl?: string;
-  outputDownloadUrl?: string;
+  success: false;
+  error: string;
 }
 
 export interface UrlCaptureResponse {
