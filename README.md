@@ -49,6 +49,23 @@ npm install
 npm run dev
 ```
 
+### 운영 서버 Docker 배포
+
+기존 운영 서버의 프로젝트 루트에서 실행합니다. 서버의 `.env`와 외부 Docker 네트워크 `web`이 설정되어 있어야 합니다.
+
+```bash
+bash scripts/deploy.sh
+```
+
+스크립트가 `git pull --ff-only`, 현재 커밋 SHA 태그로 이미지 빌드, 컨테이너 갱신, 상태 확인을 순서대로 수행합니다. 이미 `git pull`을 실행했어도 같은 명령어를 사용하면 됩니다.
+
+배포 후 상태와 앱 로그는 아래 명령어로 확인합니다.
+
+```bash
+docker compose -f compose.prod.yaml ps
+docker compose -f compose.prod.yaml logs --tail=100 -f app
+```
+
 ## 7. 성능 개선 및 운영 경험
 
 - **데이터 최적화:** 이미지 최적화 알고리즘을 통해 평균 60~80%의 파일 용량 감소율을 기록했습니다.
