@@ -59,16 +59,12 @@ export function MediaTile({
       : Math.round(Math.min(Math.max(progress, 0), 1) * 100);
 
   return (
-    <article
-      className={cn(
-        "group relative min-w-0 transition-opacity duration-200",
-        dimmed && "opacity-55",
-        className,
-      )}
-    >
+    <article className={cn("group relative min-w-0", className)}>
       <div
         className={cn(
-          "relative aspect-[16/10] overflow-hidden rounded-lg border bg-surface",
+          // 어둡게 할 때도 글자 대비를 지키려고 썸네일만 흐리게 한다.
+          "relative aspect-[16/10] overflow-hidden rounded-lg border bg-surface transition-opacity duration-200",
+          dimmed && "opacity-55",
           selected ? "border-accent ring-1 ring-accent" : "border-line",
           checkerboard &&
             "bg-[conic-gradient(var(--color-surface-2)_25%,var(--color-surface)_0_50%,var(--color-surface-2)_0_75%,var(--color-surface)_0)] bg-[length:16px_16px]",
@@ -135,7 +131,7 @@ export function MediaTile({
               type="button"
               onClick={onSelect}
               aria-pressed={selected}
-              className="text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
+              className="text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
             >
               {name}
             </button>

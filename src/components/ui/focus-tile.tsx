@@ -1,6 +1,6 @@
 // 초점 받은 결과 하나를 비교 미리보기와 정보 패널로 크게 보여 주는 타일
 
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FocusTileProps {
@@ -13,9 +13,12 @@ interface FocusTileProps {
   subtitle?: React.ReactNode;
   /** 감소율 같은 큰 숫자. 예: "−84%" */
   metric?: React.ReactNode;
+  metricTone?: "default" | "warning";
   /** 예: "3.1 MB → 498 KB" */
   sizeLine?: React.ReactNode;
   details?: { label: React.ReactNode; value: React.ReactNode }[];
+  /** 정보 패널 안의 추가 컨트롤(개별 크기 조절 등) */
+  extra?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }
@@ -32,8 +35,10 @@ export function FocusTile({
   title,
   subtitle,
   metric,
+  metricTone = "default",
   sizeLine,
   details,
+  extra,
   actions,
   className,
 }: FocusTileProps) {
@@ -43,14 +48,15 @@ export function FocusTile({
   return (
     <article
       className={cn(
-        "flex flex-col overflow-hidden rounded-tile border-2 border-accent bg-surface lg:flex-row",
+        // 부모 컨테이너가 충분히 넓을 때만 미디어와 정보 패널을 나란히 놓는다(부모에 @container 필요).
+        "flex flex-col overflow-hidden rounded-tile border-2 border-accent bg-surface @min-[54rem]:flex-row",
         className,
       )}
     >
-      <div className="relative aspect-[16/10] w-full shrink-0 bg-bg lg:w-[544px]">
+      <div className="relative aspect-[16/10] w-full shrink-0 bg-bg @min-[54rem]:w-[544px]">
         {media}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col p-5 lg:w-[292px] lg:flex-none">
+      <div className="flex min-w-0 flex-1 flex-col p-5 @min-[54rem]:w-[292px] @min-[54rem]:flex-none">
         {badge && badgeStyle && (
           <span
             className={cn(
@@ -65,9 +71,14 @@ export function FocusTile({
         <h3 className="mt-2.5 break-all text-xl font-bold tracking-[-0.02em]">
           {title}
         </h3>
-        {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
+        {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
         {metric && (
-          <p className="mt-4 font-display text-metric tracking-[0.01em]">
+          <p
+            className={cn(
+              "mt-4 font-display text-metric tracking-[0.01em]",
+              metricTone === "warning" && "text-warning",
+            )}
+          >
             {metric}
           </p>
         )}
@@ -82,6 +93,7 @@ export function FocusTile({
             ))}
           </dl>
         )}
+        {extra && <div className="mt-4 border-t border-line pt-3">{extra}</div>}
         {actions && (
           <div className="mt-auto flex gap-2 pt-5 [&>*]:flex-1">{actions}</div>
         )}

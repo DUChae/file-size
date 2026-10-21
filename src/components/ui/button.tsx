@@ -17,6 +17,9 @@ const buttonVariants = cva(
           "border-line bg-surface text-text hover:border-line-strong hover:bg-surface-2",
         ghost:
           "border-transparent bg-transparent text-muted hover:bg-surface hover:text-text",
+        // 초점 타일의 "저장"처럼 주 버튼 다음으로 강한 행동. 노란색은 쓰지 않는다.
+        inverse:
+          "border-text bg-text text-bg hover:border-muted hover:bg-muted",
         danger:
           "border-line bg-surface text-danger hover:border-danger/50 hover:bg-danger/10",
       },
@@ -80,9 +83,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type={type ?? "button"}
         className={classes}
-        disabled={disabled || loading}
+        // 처리 중에는 흐리게 만들지 않고 누르는 것만 막는다(진행 상태가 잘 보이도록).
+        disabled={disabled}
+        aria-disabled={loading || undefined}
         aria-busy={loading || undefined}
         {...props}
+        onClick={loading ? undefined : props.onClick}
       >
         {loading && <Loader2 className="animate-spin" aria-hidden="true" />}
         {loading && iconOnly ? null : children}
