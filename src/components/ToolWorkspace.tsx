@@ -44,9 +44,6 @@ function renderTool(key: ToolKey) {
   }
 }
 
-// 새 공통 틀(ToolLayout)로 옮긴 도구. 나머지는 옮길 때까지 예전 틀(제목 + 본문)을 쓴다.
-const MIGRATED = new Set<ToolKey>(["compress", "webp", "avif", "capture", "remove-bg"]);
-
 function ToolPanel({
   toolKey,
   active,
@@ -69,24 +66,9 @@ function ToolPanel({
 
   return (
     <ToolActivityProvider value={activity}>
-      {MIGRATED.has(toolKey) ? (
-        <div hidden={!active} className="animate-fade-in">
-          {renderTool(toolKey)}
-        </div>
-      ) : (
-        <div
-          hidden={!active}
-          className="mx-auto w-full max-w-[1440px] animate-fade-in px-4 py-6 md:px-8 md:py-8"
-        >
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <h1 className="text-title font-bold tracking-[-0.02em]">
-              {TOOLS.find((tool) => tool.id === toolIdOf(toolKey))?.label}
-            </h1>
-            {subnav}
-          </div>
-          <div className="relative min-h-[500px]">{renderTool(toolKey)}</div>
-        </div>
-      )}
+      <div hidden={!active} className="animate-fade-in">
+        {renderTool(toolKey)}
+      </div>
     </ToolActivityProvider>
   );
 }
