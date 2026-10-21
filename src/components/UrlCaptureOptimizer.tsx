@@ -1,29 +1,40 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
-import {
-  ArrowRight,
-  CheckCircle2,
-  Download,
-  Globe2,
-  Grip,
-  Image as ImageIcon,
-  Loader2,
-  Maximize2,
-  X,
-  Plus,
-  Trash2,
-  Layers,
-} from "lucide-react";
+import { Download, Globe2, RotateCcw, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { FocusTile } from "@/components/ui/focus-tile";
+import { InlineAlert } from "@/components/ui/inline-alert";
+import { ChipGroup } from "@/components/ui/chip-group";
+import { NumberField } from "@/components/ui/number-field";
+import { ToolLayout } from "@/components/ui/tool-layout";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  TileBoard,
+  type BoardGroup,
+  type BoardTile,
+} from "@/components/TileBoard";
+import {
+  CaptureCropEditor,
+  clampCrop,
+  type CropRect,
+} from "@/components/CaptureCropEditor";
+import { formatChange } from "@/components/ImageResultBoard";
+import { useReportBusy } from "@/components/ToolActivity";
+import { useNow, useReleaseBlobUrls } from "@/components/toolHooks";
+import { formatSize } from "@/lib/format";
 import { OutputFormat, UrlCaptureResponse } from "@/types/image";
 import { requestCompression } from "@/utils/compression";
-import { useReportBusy } from "@/components/ToolActivity";
 
-type CaptureStatus = "idle" | "capturing" | "captured" | "compressing" | "done" | "error";
+type CaptureStatus =
+  | "idle"
+  | "capturing"
+  | "captured"
+  | "compressing"
+  | "done"
+  | "error";
 
 interface CaptureItem {
   id: string;
@@ -37,6 +48,8 @@ interface CaptureItem {
   targetHeight: number;
   targetX: number;
   targetY: number;
+  startedAt?: number;
+  completedAt?: number;
 }
 
 interface OptimizedResult {
@@ -45,14 +58,31 @@ interface OptimizedResult {
   downloadUrl: string;
   originalSize: number;
   optimizedSize: number;
+  format: CaptureFormat;
 }
 
-const FORMAT_OPTIONS: Array<Exclude<OutputFormat, "original" | "gif">> = [
-  "png",
-  "jpeg",
-  "webp",
-  "avif",
+type CaptureFormat = Exclude<OutputFormat, "original" | "gif">;
+
+const FORMAT_OPTIONS: { value: CaptureFormat; label: string }[] = [
+  { value: "png", label: "PNG" },
+  { value: "jpeg", label: "JPEG" },
+  { value: "webp", label: "WebP" },
+  { value: "avif", label: "AVIF" },
 ];
+
+const GROUPS: BoardGroup[] = [
+  { key: "done", title: "처리 완료" },
+  { key: "captured", title: "영역 선택" },
+  { key: "processing", title: "처리 중" },
+  { key: "queued", title: "대기" },
+  { key: "error", title: "실패" },
+];
+
+function formatLabel(format: CaptureFormat) {
+  return (
+    FORMAT_OPTIONS.find((option) => option.value === format)?.label ?? format
+  );
+}
 
 function createCaptureItem(rawUrl: string): CaptureItem | null {
   const normalized = rawUrl.trim().replace(/[)\].,;]+$/g, "");
@@ -81,522 +111,668 @@ async function parseResponseJson<T>(response: Response): Promise<T> {
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error("페이지 캡처에 실패했습니다. 사이트가 캡처 요청을 차단했거나 HTTP/HTTPS 접속을 지원하지 않을 수 있습니다. 잠시 후 다시 시도해 주세요.");
+    throw new Error("캡처 서버 응답 오류 · 사이트가 캡처를 막았을 수 있습니다");
   }
+}
+
+/** 입력 중에는 그대로 두고, 칸을 벗어나거나 Enter를 누를 때 반영하는 픽셀 입력 */
+function PixelField({
+  label,
+  value,
+  disabled,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  disabled?: boolean;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const parsed = Number(draft);
+    if (Number.isFinite(parsed)) onCommit(parsed);
+    setDraft(null);
+  };
+  return (
+    <NumberField
+      label={label}
+      unit="px"
+      value={draft ?? String(value)}
+      disabled={disabled}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") commit();
+      }}
+    />
+  );
+}
+
+function CaptureFocus({
+  item,
+  format,
+  onRectChange,
+  onCompress,
+  onSaveResult,
+  onSaveOriginal,
+}: {
+  item: CaptureItem;
+  format: CaptureFormat;
+  onRectChange: (rect: CropRect) => void;
+  onCompress: () => void;
+  onSaveResult: () => void;
+  onSaveOriginal: () => void;
+}) {
+  const data = item.captureData;
+  if (!data?.sourceUrl || !data.width || !data.height) return null;
+  const pageWidth = data.width;
+  const pageHeight = data.height;
+  const rect = {
+    x: item.targetX,
+    y: item.targetY,
+    width: item.targetWidth,
+    height: item.targetHeight,
+  };
+  const busy = item.status === "compressing";
+  const result = item.result;
+  const commit = (patch: Partial<CropRect>) =>
+    onRectChange(clampCrop({ ...rect, ...patch }, pageWidth, pageHeight));
+
+  return (
+    <FocusTile
+      mediaClassName="aspect-auto h-[min(70dvh,34rem)]"
+      media={
+        <CaptureCropEditor
+          src={data.sourceUrl}
+          name={item.displayUrl}
+          pageWidth={pageWidth}
+          pageHeight={pageHeight}
+          rect={rect}
+          onChange={onRectChange}
+          disabled={busy}
+        />
+      }
+      badge={
+        result
+          ? { tone: "success", label: "완료" }
+          : { tone: "neutral", label: busy ? "압축 중" : "영역 선택" }
+      }
+      title={item.displayUrl}
+      subtitle={`전체 페이지 ${pageWidth} × ${pageHeight}`}
+      metric={
+        result
+          ? formatChange(result.originalSize, result.optimizedSize)
+          : undefined
+      }
+      sizeLine={
+        result
+          ? `${formatSize(result.originalSize)} → ${formatSize(result.optimizedSize)}`
+          : undefined
+      }
+      details={
+        result
+          ? [{ label: "출력 포맷", value: formatLabel(result.format) }]
+          : undefined
+      }
+      extra={
+        <div className="space-y-3">
+          <p className="text-xs text-muted">
+            왼쪽에서 상자를 끌어 옮기고 오른쪽 아래 모서리로 크기를 바꿉니다.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <PixelField
+              label="가로"
+              value={rect.width}
+              disabled={busy}
+              onCommit={(width) => commit({ width })}
+            />
+            <PixelField
+              label="세로"
+              value={rect.height}
+              disabled={busy}
+              onCommit={(height) => commit({ height })}
+            />
+            <PixelField
+              label="X"
+              value={rect.x}
+              disabled={busy}
+              onCommit={(x) => commit({ x })}
+            />
+            <PixelField
+              label="Y"
+              value={rect.y}
+              disabled={busy}
+              onCommit={(y) => commit({ y })}
+            />
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() =>
+              onRectChange({ x: 0, y: 0, width: pageWidth, height: pageHeight })
+            }
+          >
+            <RotateCcw aria-hidden="true" />
+            전체 페이지로
+          </Button>
+        </div>
+      }
+      actions={
+        result ? (
+          <>
+            <Button onClick={onCompress}>다시 압축</Button>
+            <Button variant="inverse" onClick={onSaveResult}>
+              <Download aria-hidden="true" />
+              저장
+              <span className="sr-only"> {result.filename}</span>
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={onSaveOriginal} disabled={!data.downloadUrl}>
+              원본 저장
+            </Button>
+            <Button variant="inverse" onClick={onCompress} loading={busy}>
+              <Scissors aria-hidden="true" />
+              {`이 영역 ${formatLabel(format)}로 압축`}
+            </Button>
+          </>
+        )
+      }
+    />
+  );
 }
 
 export default function UrlCaptureOptimizer() {
   const [urls, setUrls] = useState<CaptureItem[]>([]);
   const [inputUrl, setInputUrl] = useState("");
-  const [globalFormat, setGlobalFormat] = useState<OutputFormat>("png");
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  useReportBusy(
-    urls.filter((item) => item.status === "capturing" || item.status === "compressing").length,
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [globalFormat, setGlobalFormat] = useState<CaptureFormat>("png");
+  const [manualFocusId, setManualFocusId] = useState<string | null>(null);
+  const [zipState, setZipState] = useState<"idle" | "busy" | "error">("idle");
+  const [announcement, setAnnouncement] = useState("");
+
+  const processingCount = urls.filter(
+    (item) => item.status === "capturing" || item.status === "compressing",
+  ).length;
+  useReportBusy(processingCount);
+  const now = useNow(processingCount > 0);
+  useReleaseBlobUrls(urls.map((item) => item.result?.url));
+
+  const updateItem = useCallback(
+    (id: string, updates: Partial<CaptureItem>) => {
+      setUrls((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, ...updates } : item)),
+      );
+    },
+    [],
   );
-  const previewRef = useRef<HTMLDivElement | null>(null);
 
-  const activeItem = urls.find((item) => item.id === activeItemId);
-
-  // Compressed results are blob: URLs; release the ones that are replaced or removed,
-  // and whatever is left when the component unmounts.
-  const liveUrlsRef = useRef(new Set<string>());
-  useEffect(() => {
-    const current = new Set(urls.flatMap((item) => (item.result ? [item.result.url] : [])));
-    liveUrlsRef.current.forEach((url) => {
-      if (!current.has(url)) URL.revokeObjectURL(url);
-    });
-    liveUrlsRef.current = current;
-  }, [urls]);
-  useEffect(() => {
-    const liveUrls = liveUrlsRef;
-    return () => liveUrls.current.forEach((url) => URL.revokeObjectURL(url));
-  }, []);
-
-  const addUrl = (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const addUrl = (event?: React.FormEvent) => {
+    event?.preventDefault();
     if (!inputUrl.trim()) return;
-    
+
     // Robust regex to find URLs in any text
-    const urlRegex = /(https?:\/\/[^\s,]+|(?:[a-zA-Z0-9가-힣][a-zA-Z0-9가-힣-]*\.)+[a-zA-Z가-힣]{2,}(?:\/[^\s,]*)?)/gi;
+    const urlRegex =
+      /(https?:\/\/[^\s,]+|(?:[a-zA-Z0-9가-힣][a-zA-Z0-9가-힣-]*\.)+[a-zA-Z가-힣]{2,}(?:\/[^\s,]*)?)/gi;
     const matches = inputUrl.match(urlRegex) || [];
-    
     const newUrls = matches
       .map(createCaptureItem)
       .filter((item): item is CaptureItem => Boolean(item));
 
-    if (newUrls.length > 0) {
-      setUrls(prev => [...prev, ...newUrls]);
-      setInputUrl("");
-      if (!activeItemId) setActiveItemId(newUrls[0].id);
+    if (newUrls.length === 0) {
+      setInputError("주소를 찾지 못했습니다 · example.com 형식으로 입력하세요");
+      return;
     }
+    setInputError(null);
+    setUrls((prev) => [...prev, ...newUrls]);
+    setInputUrl("");
   };
 
-  const removeUrl = (id: string) => {
-    setUrls(prev => prev.filter(item => item.id !== id));
-    if (activeItemId === id) setActiveItemId(null);
-  };
+  const removeUrl = (id: string) =>
+    setUrls((prev) => prev.filter((item) => item.id !== id));
 
-  const updateItem = useCallback((id: string, updates: Partial<CaptureItem>) => {
-    setUrls(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
-  }, []);
-
-  const handleCapture = async (item: CaptureItem, markAsCapturing = true) => {
-    if (markAsCapturing) {
-      updateItem(item.id, { status: "capturing", error: undefined, captureData: undefined, result: undefined });
-    }
-
-    try {
-      const response = await fetch("/api/capture-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: item.url }),
-      });
-      const data = await parseResponseJson<UrlCaptureResponse>(response);
-
-      if (!response.ok || !data.success || !data.sourceUrl || !data.width || !data.height) {
-        throw new Error(data.error || "Failed to capture the page.");
-      }
-
+  const handleCapture = useCallback(
+    async (item: CaptureItem) => {
       updateItem(item.id, {
-        status: "captured",
-        captureData: data,
-        targetWidth: data.width || 1440,
-        targetHeight: data.height || 900,
-        targetX: 0,
-        targetY: 0,
+        status: "capturing",
+        error: undefined,
+        captureData: undefined,
+        result: undefined,
+        startedAt: Date.now(),
       });
-    } catch (err) {
-      updateItem(item.id, {
-        status: "error",
-        error: err instanceof Error ? err.message : "Capture failed.",
-      });
-    }
-  };
 
-  const handleBatchCapture = async () => {
-    const idleItems = urls.filter(u => u.status === "idle" || u.status === "error");
-    const idleIds = new Set(idleItems.map(item => item.id));
+      try {
+        const response = await fetch("/api/capture-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: item.url }),
+        });
+        const data = await parseResponseJson<UrlCaptureResponse>(response);
 
-    setUrls(prev => prev.map(item => idleIds.has(item.id) ? {
-      ...item,
-      status: "capturing",
-      error: undefined,
-      captureData: undefined,
-      result: undefined,
-    } : item));
-
-    for (const item of idleItems) {
-      await handleCapture(item, false);
-    }
-  };
-
-  const handleCompress = async (item: CaptureItem) => {
-    if (!item.captureData?.filename || !item.captureData.captureId) return;
-
-    updateItem(item.id, { status: "compressing", error: undefined, result: undefined });
-
-    try {
-      const res = await requestCompression(
-        { captureId: item.captureData.captureId },
-        {
-          filename: item.captureData.filename,
-          mimeType: item.captureData.mimeType || "image/png",
-          category: "screenshot",
-          targetFormat: globalFormat,
-          webWidth: item.targetWidth,
-          webHeight: item.targetHeight,
-          webX: item.targetX,
-          webY: item.targetY,
-        },
-      );
-
-      const displayFilename = item.displayUrl + `.${globalFormat}`;
-
-      updateItem(item.id, {
-        status: "done",
-        result: {
-          filename: displayFilename,
-          url: res.optimizedUrl,
-          downloadUrl: res.optimizedDownloadUrl,
-          originalSize: res.originalSize,
-          optimizedSize: res.optimizedSize,
+        if (
+          !response.ok ||
+          !data.success ||
+          !data.sourceUrl ||
+          !data.width ||
+          !data.height
+        ) {
+          throw new Error(data.error || "페이지를 캡처하지 못했습니다");
         }
-      });
-    } catch (err) {
+
+        updateItem(item.id, {
+          status: "captured",
+          captureData: data,
+          targetWidth: data.width || 1440,
+          targetHeight: data.height || 900,
+          targetX: 0,
+          targetY: 0,
+          completedAt: Date.now(),
+        });
+        setAnnouncement(`${item.displayUrl} 캡처 완료`);
+      } catch (err) {
+        const error =
+          err instanceof Error ? err.message : "페이지를 캡처하지 못했습니다";
+        updateItem(item.id, {
+          status: "error",
+          error,
+          completedAt: Date.now(),
+        });
+        setAnnouncement(`${item.displayUrl} 캡처 실패, ${error}`);
+      }
+    },
+    [updateItem],
+  );
+
+  const handleCompress = useCallback(
+    async (item: CaptureItem) => {
+      if (!item.captureData?.filename || !item.captureData.captureId) return;
+      const format = globalFormat;
+
       updateItem(item.id, {
-        status: "error",
-        error: err instanceof Error ? err.message : "Compression failed.",
+        status: "compressing",
+        error: undefined,
+        result: undefined,
+        startedAt: Date.now(),
       });
+
+      try {
+        const res = await requestCompression(
+          { captureId: item.captureData.captureId },
+          {
+            filename: item.captureData.filename,
+            mimeType: item.captureData.mimeType || "image/png",
+            category: "screenshot",
+            targetFormat: format,
+            webWidth: item.targetWidth,
+            webHeight: item.targetHeight,
+            webX: item.targetX,
+            webY: item.targetY,
+          },
+        );
+
+        updateItem(item.id, {
+          status: "done",
+          completedAt: Date.now(),
+          result: {
+            filename: `${item.displayUrl}.${format}`,
+            url: res.optimizedUrl,
+            downloadUrl: res.optimizedDownloadUrl,
+            originalSize: res.originalSize,
+            optimizedSize: res.optimizedSize,
+            format,
+          },
+        });
+        setAnnouncement(
+          `${item.displayUrl} 압축 완료, ${formatSize(res.optimizedSize)}`,
+        );
+      } catch (err) {
+        const error =
+          err instanceof Error ? err.message : "압축하지 못했습니다";
+        updateItem(item.id, {
+          status: "error",
+          error,
+          completedAt: Date.now(),
+        });
+        setAnnouncement(`${item.displayUrl} 압축 실패, ${error}`);
+      }
+    },
+    [updateItem, globalFormat],
+  );
+
+  // 여러 사이트를 한 번에 요청하지 않도록 차례로 처리한다.
+  const captureAll = async () => {
+    setManualFocusId(null);
+    for (const item of urls.filter(
+      (u) => u.status === "idle",
+    )) {
+      await handleCapture(item);
     }
   };
-
-  const handleBatchCompress = async () => {
-    const capturedItems = urls.filter(u => u.status === "captured" || u.status === "done");
-    for (const item of capturedItems) {
-      // Use full dimensions if they haven't been customized, or just force them for batch
+  const compressAll = async () => {
+    setManualFocusId(null);
+    for (const item of urls.filter(
+      (u) =>
+        u.status === "captured" ||
+        u.status === "done" ||
+        (u.status === "error" && u.captureData),
+    )) {
       await handleCompress(item);
     }
   };
 
-  const downloadZip = async () => {
-    const completedResults = urls.filter(u => u.result).map(u => u.result!);
-    if (completedResults.length === 0) return;
-
-    const zip = new JSZip();
-    const folder = zip.folder("captured-images");
-
-    for (const res of completedResults) {
-      const imgResponse = await fetch(res.url);
-      const blob = await imgResponse.blob();
-      folder?.file(res.filename, blob);
-    }
-
-    const content = await zip.generateAsync({ type: "blob" });
-    saveAs(content, "url-capture.zip");
+  const retry = (id: string) => {
+    const item = urls.find((entry) => entry.id === id);
+    if (!item) return;
+    if (item.captureData) void handleCompress(item);
+    else void handleCapture(item);
   };
 
-  const handleMoveStart = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!activeItem?.captureData || !previewRef.current) return;
-      if ((event.target as HTMLElement).closest("button")) return;
+  const downloadZip = async () => {
+    const results = urls.flatMap((item) => (item.result ? [item.result] : []));
+    if (results.length === 0) return;
+    setZipState("busy");
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder("captured-images");
+      const used = new Set<string>();
+      for (const res of results) {
+        const blob = await (await fetch(res.url)).blob();
+        let filename = res.filename;
+        for (let n = 1; used.has(filename); n++) {
+          filename = res.filename.replace(/(\.[^.]+)$/, ` (${n})$1`);
+        }
+        used.add(filename);
+        folder?.file(filename, blob);
+      }
+      const content = await zip.generateAsync({ type: "blob" });
+      saveAs(content, "url-capture.zip");
+      setZipState("idle");
+    } catch {
+      setZipState("error");
+    }
+  };
 
-      event.preventDefault();
-      const { width: captureWidth, height: captureHeight } = activeItem.captureData;
-      const startClientX = event.clientX;
-      const startClientY = event.clientY;
-      const startX = activeItem.targetX;
-      const startY = activeItem.targetY;
-      const previewRect = previewRef.current.getBoundingClientRect();
-      const widthScale = (captureWidth || 1440) / previewRect.width;
-      const heightScale = (captureHeight || 900) / previewRect.height;
+  // 영역을 바꾸면 이전 압축 결과는 더 이상 맞지 않으므로 지운다.
+  const changeRect = (id: string, rect: CropRect) =>
+    updateItem(id, {
+      targetX: rect.x,
+      targetY: rect.y,
+      targetWidth: rect.width,
+      targetHeight: rect.height,
+      result: undefined,
+      status: "captured",
+    });
 
-      const handleMove = (moveEvent: PointerEvent) => {
-        const deltaX = (moveEvent.clientX - startClientX) * widthScale;
-        const deltaY = (moveEvent.clientY - startClientY) * heightScale;
-        
-        const nextX = Math.round(startX + deltaX);
-        const nextY = Math.round(startY + deltaY);
-        
-        updateItem(activeItem.id, {
-          targetX: Math.max(0, Math.min((captureWidth || 1440) - activeItem.targetWidth, nextX)),
-          targetY: Math.max(0, Math.min((captureHeight || 900) - activeItem.targetHeight, nextY)),
-          result: undefined,
-          status: "captured"
-        });
-      };
+  const idleCount = urls.filter(
+    (u) => u.status === "idle",
+  ).length;
+  const capturedCount = urls.filter(
+    (u) => u.status === "captured" || (u.status === "error" && u.captureData),
+  ).length;
+  const doneCount = urls.filter((u) => u.status === "done").length;
+  const running = processingCount > 0;
 
-      const handleUp = () => {
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleUp);
-      };
-
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleUp);
-    },
-    [activeItem, updateItem],
+  const isExpandable = (item: CaptureItem) =>
+    Boolean(item.captureData?.sourceUrl) &&
+    (item.status === "captured" ||
+      item.status === "done" ||
+      item.status === "compressing");
+  const manualItem = urls.find(
+    (item) => item.id === manualFocusId && isExpandable(item),
   );
+  const latest = urls
+    .filter(isExpandable)
+    .reduce<
+      CaptureItem | undefined
+    >((best, item) => (!best || (item.completedAt ?? 0) > (best.completedAt ?? 0) ? item : best), undefined);
+  const expandedId = manualItem?.id ?? latest?.id ?? null;
 
-  const handleResizeStart = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (!activeItem?.captureData || !previewRef.current) return;
+  const tiles: BoardTile[] = urls.map((item) => {
+    const seconds = item.startedAt
+      ? Math.max(0, Math.floor((now - item.startedAt) / 1000))
+      : 0;
+    const data = item.captureData;
+    const base = {
+      id: item.id,
+      name: item.displayUrl,
+      expandable: isExpandable(item),
+      removable: item.status !== "capturing" && item.status !== "compressing",
+      thumbnailTop: true,
+      thumbnail: data?.sourceUrl ? undefined : (
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
+          <Globe2 className="size-6 text-muted" aria-hidden="true" />
+          <span className="max-w-full truncate text-xs text-muted">
+            {item.displayUrl}
+          </span>
+        </span>
+      ),
+      thumbnailUrl: item.result?.url ?? data?.sourceUrl,
+    };
+    switch (item.status) {
+      case "done":
+        return {
+          ...base,
+          group: "done",
+          status: "done",
+          thumbnailTop: false,
+          meta: `${formatSize(item.result?.originalSize ?? 0)} → ${formatSize(item.result?.optimizedSize ?? 0)} · ${item.result ? formatLabel(item.result.format) : ""}`,
+        };
+      case "captured":
+        return {
+          ...base,
+          group: "captured",
+          status: "done",
+          meta: `영역 ${item.targetWidth}×${item.targetHeight} · 전체 ${data?.width}×${data?.height}`,
+        };
+      case "capturing":
+        return {
+          ...base,
+          group: "processing",
+          status: "processing",
+          meta: `캡처 중 ${seconds}초`,
+        };
+      case "compressing":
+        return {
+          ...base,
+          group: "processing",
+          status: "processing",
+          meta: `압축 중 ${seconds}초`,
+        };
+      case "error":
+        return {
+          ...base,
+          group: "error",
+          status: "error",
+          meta: data ? "압축 실패" : "캡처 실패",
+          error: item.error,
+        };
+      default:
+        return { ...base, group: "queued", status: "queued", meta: "대기 중" };
+    }
+  });
 
-      event.preventDefault();
-      const { width: captureWidth, height: captureHeight } = activeItem.captureData;
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const startWidth = activeItem.targetWidth;
-      const startHeight = activeItem.targetHeight;
-      const previewRect = previewRef.current.getBoundingClientRect();
-      const widthScale = (captureWidth || 1440) / previewRect.width;
-      const heightScale = (captureHeight || 900) / previewRect.height;
+  const primary =
+    idleCount > 0
+      ? { label: `캡처 시작 (${idleCount})`, run: captureAll }
+      : capturedCount > 0
+        ? { label: `압축 시작 (${capturedCount})`, run: compressAll }
+        : doneCount > 0
+          ? { label: "다시 압축", run: compressAll }
+          : { label: "캡처 시작", run: captureAll };
 
-      const handleMove = (moveEvent: PointerEvent) => {
-        const nextWidth = Math.round(startWidth + (moveEvent.clientX - startX) * widthScale);
-        const nextHeight = Math.round(startHeight + (moveEvent.clientY - startY) * heightScale);
-        
-        updateItem(activeItem.id, {
-          targetWidth: Math.max(320, Math.min((captureWidth || 1440) - activeItem.targetX, nextWidth)),
-          targetHeight: Math.max(240, Math.min((captureHeight || 900) - activeItem.targetY, nextHeight)),
-          result: undefined,
-          status: "captured"
-        });
-      };
+  const summary =
+    urls.length === 0
+      ? "주소를 넣고 캡처한 뒤, 저장할 영역을 골라 압축합니다"
+      : [
+          `${urls.length}개 주소`,
+          capturedCount > 0 && `영역 선택 ${capturedCount}개`,
+          doneCount > 0 && `${doneCount}개 완료`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
-      const handleUp = () => {
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleUp);
-      };
-
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleUp);
-    },
-    [activeItem, updateItem],
-  );
+  const renderExpanded = (id: string) => {
+    const item = urls.find((entry) => entry.id === id);
+    if (!item) return null;
+    return (
+      <CaptureFocus
+        item={item}
+        format={globalFormat}
+        onRectChange={(rect) => changeRect(item.id, rect)}
+        onCompress={() => void handleCompress(item)}
+        onSaveResult={() =>
+          item.result && saveAs(item.result.downloadUrl, item.result.filename)
+        }
+        onSaveOriginal={() =>
+          item.captureData?.downloadUrl &&
+          saveAs(
+            item.captureData.downloadUrl,
+            item.captureData.filename ?? `${item.displayUrl}.png`,
+          )
+        }
+      />
+    );
+  };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12">
-      {/* Input Section */}
-      <div className="bg-white/[0.02] border border-white/10 rounded-[32px] p-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center">
-              <Plus className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-white">Capture Queue</h3>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Add multiple URLs to batch process</p>
-            </div>
-          </div>
-          {urls.length > 0 && (
-            <div className="flex gap-4">
-              <Button 
-                variant="secondary" 
-                onClick={handleBatchCapture}
-                disabled={urls.every(u => u.status !== "idle" && u.status !== "error")}
-                className="rounded-full border-white/10 text-xs font-black"
-              >
-                일괄 캡처 ({urls.filter(u => u.status === "idle" || u.status === "error").length})
-              </Button>
-              <Button 
-                variant="primary" 
-                onClick={handleBatchCompress}
-                disabled={!urls.some(u => u.status === "captured" || u.status === "done")}
-                className="rounded-full text-xs font-black px-8"
-              >
-                일괄 압축
-              </Button>
-            </div>
+    <ToolLayout
+      title="웹페이지 캡처"
+      summary={summary}
+      settingsTitle="캡처 설정"
+      settings={
+        <div>
+          <span
+            id="capture-format-label"
+            className="mb-2 block text-xs font-semibold text-muted"
+          >
+            출력 포맷
+          </span>
+          <ChipGroup
+            aria-labelledby="capture-format-label"
+            columns={4}
+            value={globalFormat}
+            onValueChange={setGlobalFormat}
+            options={FORMAT_OPTIONS}
+          />
+          <p className="mt-2 text-xs text-muted">
+            선택한 영역을 압축할 때 적용됩니다.
+          </p>
+        </div>
+      }
+      actions={
+        <>
+          <Button
+            variant="ghost"
+            onClick={() => setUrls([])}
+            disabled={running || urls.length === 0}
+          >
+            비우기
+          </Button>
+          <Button
+            onClick={() => void downloadZip()}
+            disabled={doneCount === 0 || running}
+            loading={zipState === "busy"}
+          >
+            전체 ZIP 저장
+          </Button>
+          {idleCount > 0 && capturedCount > 0 && (
+            <Button onClick={() => void compressAll()} disabled={running}>
+              압축 시작 ({capturedCount})
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            onClick={() => void primary.run()}
+            disabled={urls.length === 0}
+            loading={running}
+          >
+            {running ? `처리 중 (${processingCount})` : primary.label}
+          </Button>
+        </>
+      }
+    >
+      <p className="sr-only" aria-live="polite">
+        {announcement}
+      </p>
+
+      <form
+        onSubmit={addUrl}
+        className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-start"
+      >
+        <div className="min-w-0 flex-1">
+          <label htmlFor="capture-url" className="sr-only">
+            캡처할 웹페이지 주소
+          </label>
+          <textarea
+            id="capture-url"
+            value={inputUrl}
+            onChange={(event) => {
+              setInputUrl(event.target.value);
+              if (inputError) setInputError(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                addUrl();
+              }
+            }}
+            rows={1}
+            placeholder="example.com · 여러 개는 줄바꿈(Shift+Enter)이나 쉼표로 구분"
+            aria-invalid={inputError ? true : undefined}
+            aria-describedby={inputError ? "capture-url-error" : undefined}
+            className="block min-h-10 w-full resize-y rounded-lg border border-line bg-bg px-3 py-2 text-base text-text outline-none transition-colors hover:border-line-strong focus:border-text"
+          />
+          {inputError && (
+            <p id="capture-url-error" className="mt-1.5 text-xs text-danger">
+              {inputError}
+            </p>
           )}
         </div>
+        <Button type="submit">목록에 추가</Button>
+      </form>
 
-        <form onSubmit={addUrl} className="flex gap-4">
-          <div className="flex-1 flex items-center gap-4 bg-white/[0.03] border border-white/10 rounded-2xl px-5">
-            <Globe2 className="w-5 h-5 text-slate-500 shrink-0" />
-            <textarea
-              value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="URL을 입력하세요 (엔터나 콤마로 여러 개 입력 가능)"
-              className="w-full bg-transparent py-5 text-sm font-bold text-white outline-none placeholder:text-slate-700 resize-none h-16"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  addUrl();
-                }
-              }}
-            />
-          </div>
-          <Button type="submit" variant="primary" className="rounded-2xl px-10">
-            큐에 추가
-          </Button>
-        </form>
+      <div className="space-y-6">
+        {zipState === "error" && (
+          <InlineAlert
+            tone="danger"
+            title="ZIP 파일을 만들지 못했습니다"
+            actions={
+              <Button size="sm" onClick={() => void downloadZip()}>
+                다시 시도
+              </Button>
+            }
+          >
+            결과를 하나씩 저장하거나 다시 시도하세요.
+          </InlineAlert>
+        )}
 
-        {urls.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {urls.map((item) => (
-              <div 
-                key={item.id}
-                onClick={() => setActiveItemId(item.id)}
-                className={cn(
-                  "relative group flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer",
-                  activeItemId === item.id 
-                    ? "bg-white/10 border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.1)]" 
-                    : "bg-white/[0.03] border-white/5 hover:border-white/20"
-                )}
-              >
-                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
-                  {item.status === "capturing" || item.status === "compressing" ? (
-                    <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                  ) : item.status === "done" ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <Globe2 className="w-4 h-4 text-slate-600" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-black text-white truncate">{item.displayUrl}</div>
-                  <div className={cn(
-                    "text-[9px] font-black uppercase tracking-widest mt-1",
-                    item.status === "error" ? "text-red-500" : "text-slate-500"
-                  )}>
-                    {item.error || (item.status === "done" ? "최적화 완료" : item.status)}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {item.result && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        saveAs(item.result!.downloadUrl, item.result!.filename);
-                      }}
-                      className="p-2 text-blue-400 hover:text-blue-300 transition-all"
-                      title="개별 다운로드"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                  )}
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); removeUrl(item.id); }}
-                    className="p-2 text-slate-600 hover:text-red-500 transition-all"
-                    title="제거"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+        {urls.length === 0 ? (
+          <EmptyState
+            icon={Globe2}
+            title="캡처할 웹페이지 주소를 위에 입력하세요"
+            description="페이지 전체를 캡처한 뒤, 저장할 영역을 골라 원하는 포맷으로 압축합니다. 캡처에는 수십 초가 걸릴 수 있습니다."
+            className="min-h-[min(50dvh,24rem)]"
+          />
+        ) : (
+          <TileBoard
+            tiles={tiles}
+            groups={GROUPS}
+            expandedId={expandedId}
+            onExpand={setManualFocusId}
+            renderExpanded={renderExpanded}
+            onEnter={(id) => {
+              const item = urls.find((entry) => entry.id === id);
+              if (item?.status === "idle") void handleCapture(item);
+            }}
+            onRetry={retry}
+            onRemove={removeUrl}
+            hint="타일에서 방향키로 이동 · Enter로 캡처하거나 영역 편집 열기 · Delete로 목록에서 제거"
+          />
         )}
       </div>
-
-      {activeItem && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-12 items-start animate-fade-in">
-          {/* Preview Area */}
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-2xl font-black text-white tracking-tight">Workspace</h3>
-                <p className="text-xs text-slate-500 font-black uppercase tracking-widest mt-1">{activeItem.displayUrl}</p>
-              </div>
-              <div className="flex gap-3">
-                {(activeItem.status === "idle" || activeItem.status === "error") && (
-                  <Button variant="primary" onClick={() => handleCapture(activeItem)} className="rounded-full px-8">
-                    Start Capture
-                  </Button>
-                )}
-                {activeItem.captureData?.downloadUrl && (
-                  <Button 
-                    variant="secondary" 
-                    onClick={() => saveAs(activeItem.captureData!.downloadUrl!, activeItem.captureData!.filename!)}
-                    className="rounded-full border-white/10 text-xs font-black"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Original
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-[32px] border border-white/10 bg-black/40 p-6 overflow-auto max-h-[800px]">
-              {activeItem.status === "capturing" ? (
-                <div className="flex flex-col items-center justify-center py-40 space-y-6">
-                  <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-                  <div className="text-sm font-black text-slate-500 uppercase tracking-widest">Capturing Full Page...</div>
-                </div>
-              ) : activeItem.captureData?.sourceUrl ? (
-                <div
-                  ref={previewRef}
-                  className="relative mx-auto overflow-hidden rounded-2xl border border-white/10 bg-white/5"
-                  style={{ width: "min(100%, 800px)" }}
-                >
-                  <img
-                    src={activeItem.captureData.sourceUrl}
-                    alt="Preview"
-                    className="block w-full select-none"
-                    draggable={false}
-                  />
-                  <div
-                    className="absolute border-2 border-blue-400 bg-blue-500/10 shadow-[0_0_40px_rgba(59,130,246,0.25)] cursor-move"
-                    onPointerDown={handleMoveStart}
-                    style={{
-                      left: `${(activeItem.targetX / activeItem.captureData.width!) * 100}%`,
-                      top: `${(activeItem.targetY / activeItem.captureData.height!) * 100}%`,
-                      width: `${(activeItem.targetWidth / activeItem.captureData.width!) * 100}%`,
-                      height: `${(activeItem.targetHeight / activeItem.captureData.height!) * 100}%`,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onPointerDown={handleResizeStart}
-                      className="absolute -bottom-4 -right-4 h-9 w-9 rounded-full bg-blue-500 text-white border border-white/30 flex items-center justify-center cursor-nwse-resize shadow-xl"
-                    >
-                      <Grip className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-40 opacity-20">
-                  <Maximize2 className="w-16 h-16 mb-6" />
-                  <div className="text-xs font-black uppercase tracking-widest">Select an item to preview</div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Settings Area */}
-          <div className="space-y-8 bg-white/[0.02] border border-white/10 rounded-[32px] p-8">
-            <div className="space-y-4">
-              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Batch Settings</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {FORMAT_OPTIONS.map((format) => (
-                  <button
-                    key={format}
-                    onClick={() => setGlobalFormat(format)}
-                    className={cn(
-                      "rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all",
-                      globalFormat === format
-                        ? "bg-white text-black"
-                        : "bg-white/[0.04] text-slate-500 hover:text-white",
-                    )}
-                  >
-                    {format}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {(activeItem.status === "captured" || activeItem.status === "done" || activeItem.status === "compressing") ? (
-              <div className="space-y-6 pt-6 border-t border-white/5">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Width</div>
-                    <div className="text-lg font-black text-white">{activeItem.targetWidth}px</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Height</div>
-                    <div className="text-lg font-black text-white">{activeItem.targetHeight}px</div>
-                  </div>
-                </div>
-                <Button 
-                  onClick={() => handleCompress(activeItem)} 
-                  variant="primary" 
-                  className="w-full rounded-2xl"
-                  disabled={activeItem.status === "compressing"}
-                >
-                  {activeItem.status === "compressing" ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-                  {activeItem.status === "done" ? "Re-compress" : "Compress Selection"}
-                </Button>
-              </div>
-            ) : null}
-
-            {urls.some(u => u.result) && (
-              <div className="space-y-6 pt-8 border-t border-white/5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-green-400 text-xs font-black">
-                    <CheckCircle2 className="w-4 h-4" />
-                    {urls.filter(u => u.result).length} READY
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    onClick={downloadZip}
-                    className="text-xs font-black text-blue-400 hover:text-blue-300"
-                  >
-                    <Layers className="w-4 h-4 mr-2" />
-                    Export all (.ZIP)
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {urls.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-40 rounded-[48px] border-2 border-dashed border-white/5">
-          <Globe2 className="w-16 h-16 text-slate-800 mb-8" />
-          <h3 className="text-2xl font-bold text-white tracking-tight">Ready to capture the web.</h3>
-          <p className="text-xs text-slate-600 font-black uppercase tracking-[0.3em] mt-3">Enter a URL above to start your batch session</p>
-        </div>
-      )}
-    </div>
+    </ToolLayout>
   );
 }

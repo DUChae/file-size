@@ -45,7 +45,7 @@ function renderTool(key: ToolKey) {
 }
 
 // 새 공통 틀(ToolLayout)로 옮긴 도구. 나머지는 옮길 때까지 예전 틀(제목 + 본문)을 쓴다.
-const MIGRATED = new Set<ToolKey>(["compress", "webp", "avif"]);
+const MIGRATED = new Set<ToolKey>(["compress", "webp", "avif", "capture", "remove-bg"]);
 
 function ToolPanel({
   toolKey,
