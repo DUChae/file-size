@@ -1,57 +1,149 @@
 "use client";
 
+import { useCallback, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import ImageOptimizer from "@/components/ImageOptimizer";
 import ImageToPdfConverter from "@/components/ImageToPdfConverter";
 import PdfToPngConverter from "@/components/PdfToPngConverter";
 import UrlCaptureOptimizer from "@/components/UrlCaptureOptimizer";
 import ImageBgRemover from "@/components/ImageBgRemover";
 import PdfCompressor from "@/components/PdfCompressor";
+import { ToolActivityProvider } from "@/components/ToolActivity";
 import { AppShell } from "@/components/ui/app-shell";
 import { ToolTabs } from "@/components/ui/tool-tabs";
-import { CONVERT_MODES, TOOLS, type ConvertMode, type ToolId } from "@/lib/tools";
+import {
+  CONVERT_MODES,
+  TOOLS,
+  isConvertMode,
+  toolIdOf,
+  toolKeyFromPath,
+  type ConvertMode,
+  type ToolId,
+  type ToolKey,
+} from "@/lib/tools";
 
-interface ToolWorkspaceProps {
-  tool: ToolId;
-  mode: ConvertMode;
+type BusyMap = Partial<Record<ToolKey, number>>;
+
+function renderTool(key: ToolKey) {
+  switch (key) {
+    case "compress":
+      return <ImageOptimizer />;
+    case "pdf-compress":
+      return <PdfCompressor />;
+    case "capture":
+      return <UrlCaptureOptimizer />;
+    case "remove-bg":
+      return <ImageBgRemover />;
+    case "pdf-to-png":
+      return <PdfToPngConverter />;
+    case "image-to-pdf":
+      return <ImageToPdfConverter />;
+    case "webp":
+    case "avif":
+      return <ImageOptimizer forcedFormat={key} />;
+  }
 }
 
-export default function ToolWorkspace({ tool, mode }: ToolWorkspaceProps) {
-  const title = TOOLS.find((item) => item.id === tool)?.label;
+function ToolPanel({
+  toolKey,
+  active,
+  onBusy,
+}: {
+  toolKey: ToolKey;
+  active: boolean;
+  onBusy: (key: ToolKey, count: number) => void;
+}) {
+  const reportBusy = useCallback(
+    (count: number) => onBusy(toolKey, count),
+    [onBusy, toolKey],
+  );
+  const activity = useMemo(() => ({ active, reportBusy }), [active, reportBusy]);
 
   return (
-    <AppShell activeTool={tool}>
-      <div className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <h1 className="text-title font-bold tracking-[-0.02em]">{title}</h1>
-          {tool === "convert" && (
-            <ToolTabs
-              items={CONVERT_MODES}
-              activeId={mode}
-              variant="sub"
-              aria-label="변환 종류"
-            />
-          )}
-        </div>
-
-        {/* 같은 자리의 같은 컴포넌트는 상태를 이어받는다(기존 동작 유지). */}
-        <div className="relative min-h-[500px] animate-fade-in">
-          {tool === "capture" ? (
-            <UrlCaptureOptimizer />
-          ) : tool === "remove-bg" ? (
-            <ImageBgRemover />
-          ) : tool === "compress" ? (
-            <ImageOptimizer />
-          ) : tool === "pdf-compress" ? (
-            <PdfCompressor />
-          ) : mode === "pdf-to-png" ? (
-            <PdfToPngConverter />
-          ) : mode === "image-to-pdf" ? (
-            <ImageToPdfConverter />
-          ) : (
-            <ImageOptimizer forcedFormat={mode} />
-          )}
-        </div>
+    <ToolActivityProvider value={activity}>
+      <div hidden={!active} className="relative min-h-[500px] animate-fade-in">
+        {renderTool(toolKey)}
       </div>
+    </ToolActivityProvider>
+  );
+}
+
+/**
+ * 도구 화면들의 공통 틀. 한 번 연 도구는 숨긴 채로 계속 마운트해 두어
+ * 다른 도구·피드백·대시보드에 갔다 와도 큐와 결과, 진행 중인 요청이 그대로 남는다.
+ * 결과 blob URL은 각 도구가 삭제·비우기·언마운트 때 해제하므로, 이 틀이 사라질 때(사이트를 떠날 때) 함께 정리된다.
+ */
+export default function ToolWorkspace({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const activeKey = toolKeyFromPath(pathname);
+
+  const [visited, setVisited] = useState<ToolKey[]>(activeKey ? [activeKey] : []);
+  const [lastConvert, setLastConvert] = useState<ConvertMode>(
+    activeKey && isConvertMode(activeKey) ? activeKey : "pdf-to-png",
+  );
+  // 경로가 바뀐 렌더에서 바로 반영해 새 도구가 한 박자 늦게 뜨지 않게 한다.
+  if (activeKey && !visited.includes(activeKey)) setVisited([...visited, activeKey]);
+  if (activeKey && isConvertMode(activeKey) && activeKey !== lastConvert) {
+    setLastConvert(activeKey);
+  }
+
+  const [busy, setBusy] = useState<BusyMap>({});
+  const reportBusy = useCallback((key: ToolKey, count: number) => {
+    setBusy((prev) => ((prev[key] ?? 0) === count ? prev : { ...prev, [key]: count }));
+  }, []);
+
+  const toolBusy = useMemo(() => {
+    const totals: Partial<Record<ToolId, number>> = {};
+    for (const [key, count] of Object.entries(busy) as [ToolKey, number][]) {
+      const id = toolIdOf(key);
+      totals[id] = (totals[id] ?? 0) + count;
+    }
+    return totals;
+  }, [busy]);
+
+  // 포맷 변환 탭은 마지막으로 쓴 하위 모드로 돌아간다.
+  const tools = useMemo(
+    () =>
+      TOOLS.map((tool) =>
+        tool.id === "convert" ? { ...tool, href: `/convert/${lastConvert}` } : tool,
+      ),
+    [lastConvert],
+  );
+
+  const activeTool = activeKey ? toolIdOf(activeKey) : undefined;
+  const section = pathname.startsWith("/feedback")
+    ? "feedback"
+    : pathname.startsWith("/admin")
+      ? "admin"
+      : undefined;
+
+  return (
+    <AppShell tools={tools} activeTool={activeTool} activeSection={section} busy={toolBusy}>
+      <div
+        hidden={!activeKey}
+        className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8"
+      >
+        {activeKey && (
+          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <h1 className="text-title font-bold tracking-[-0.02em]">
+              {TOOLS.find((tool) => tool.id === activeTool)?.label}
+            </h1>
+            {activeKey && isConvertMode(activeKey) && (
+              <ToolTabs
+                items={CONVERT_MODES}
+                activeId={activeKey}
+                busy={busy}
+                variant="sub"
+                aria-label="변환 종류"
+              />
+            )}
+          </div>
+        )}
+        {visited.map((key) => (
+          <ToolPanel key={key} toolKey={key} active={key === activeKey} onBusy={reportBusy} />
+        ))}
+      </div>
+      {children}
     </AppShell>
   );
 }

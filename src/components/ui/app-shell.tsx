@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { TOOLS, type ToolId } from "@/lib/tools";
+import { TOOLS, type ToolDefinition, type ToolId } from "@/lib/tools";
 import { ToolTabs } from "./tool-tabs";
 
 type Section = "feedback" | "admin";
 
 interface AppShellProps {
+  /** 링크 주소를 바꿔 끼울 때만 넘긴다(예: 포맷 변환 탭의 마지막 하위 모드). */
+  tools?: ToolDefinition<ToolId>[];
   activeTool?: ToolId;
   activeSection?: Section;
   busy?: Partial<Record<ToolId, number>>;
@@ -20,6 +22,7 @@ const SECONDARY_LINKS: { id: Section; label: string; href: string }[] = [
 ];
 
 export function AppShell({
+  tools = TOOLS,
   activeTool,
   activeSection,
   busy,
@@ -41,7 +44,7 @@ export function AppShell({
           OptiStream
         </Link>
         <ToolTabs
-          items={TOOLS}
+          items={tools}
           activeId={activeTool}
           busy={busy}
           aria-label="도구"

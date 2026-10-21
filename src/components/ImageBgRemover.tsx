@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatSize } from "@/lib/format";
+import { useReportBusy } from "@/components/ToolActivity";
 
 const MAX_FILES = 10;
 const CONCURRENCY = 1; // 배경 제거는 CPU 연산이 매우 무거우므로 동시성 제한을 1로 설정하여 메인 스레드 병목을 예방합니다.
@@ -28,6 +29,9 @@ export default function ImageBgRemover() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [exportFormat, setExportFormat] = useState<"png" | "webp" | "jpeg">("png");
+  useReportBusy(
+    queue.filter((item) => item.status === "removing-bg" || item.status === "compressing").length,
+  );
   const processingRef = useRef<number>(0);
 
   const handleFiles = useCallback(

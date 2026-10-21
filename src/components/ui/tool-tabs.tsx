@@ -29,28 +29,24 @@ export function ToolTabs<T extends string>({
     <nav aria-label={ariaLabel} className={className}>
       <ul
         className={cn(
-          "flex",
           primary
-            ? "h-full gap-1 overflow-x-auto [scrollbar-width:none]"
-            : "flex-wrap gap-1 rounded-lg border border-line bg-bg p-[3px] sm:inline-flex",
+            ? "flex h-full gap-1 overflow-x-auto [scrollbar-width:none]"
+            : "grid grid-cols-2 gap-1 rounded-lg border border-line bg-bg p-[3px] sm:inline-flex",
         )}
       >
         {items.map((item) => {
           const active = item.id === activeId;
           const count = busy?.[item.id] ?? 0;
           return (
-            <li
-              key={item.id}
-              className={cn(primary ? "flex shrink-0" : "flex-1 sm:flex-none")}
-            >
+            <li key={item.id} className={primary ? "flex shrink-0" : "flex"}>
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center justify-center gap-2 whitespace-nowrap text-sm transition-colors duration-150",
                   primary
-                    ? "-mb-px border-b-2 px-3.5 md:px-3.5"
-                    : "h-8 rounded-md px-3",
+                    ? "-mb-px border-b-2 px-3.5"
+                    : "h-8 w-full rounded-md px-3",
                   primary &&
                     (active
                       ? "border-text font-semibold text-text"

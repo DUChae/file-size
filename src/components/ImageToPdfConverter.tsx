@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { formatSize } from "@/lib/format";
+import { useReportBusy } from "@/components/ToolActivity";
 
 const A4_WIDTH_PT = 595.28;
 const A4_HEIGHT_PT = 841.89;
@@ -215,6 +216,7 @@ export default function ImageToPdfConverter() {
   const itemsRef = useRef<ImageQueueItem[]>([]);
 
   const isBusy = status === "compressing";
+  useReportBusy(isBusy ? 1 : 0);
   const totalOriginalSize = useMemo(
     () => items.reduce((sum, item) => sum + item.size, 0),
     [items],

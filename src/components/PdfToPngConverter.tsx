@@ -17,6 +17,7 @@ import {
   releaseCanvas,
 } from "@/lib/pdfjs";
 import { formatSize } from "@/lib/format";
+import { useReportBusy } from "@/components/ToolActivity";
 
 const MAX_PDF_SIZE = 20 * 1024 * 1024;
 const DPI_OPTIONS = [72, 144, 216, 300] as const;
@@ -50,6 +51,7 @@ export default function PdfToPngConverter() {
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [dpi, setDpi] = useState<Dpi>(144);
+  useReportBusy(status === "converting" ? 1 : 0);
 
   const fileSummary = useMemo(() => {
     if (!file) return null;

@@ -22,6 +22,7 @@ import {
   compressPdf,
 } from "@/utils/pdfCompression";
 import { formatSize } from "@/lib/format";
+import { useReportBusy } from "@/components/ToolActivity";
 
 const MAX_PDF_SIZE = 100 * 1024 * 1024;
 const DEFAULT_QUALITY = 75;
@@ -64,6 +65,7 @@ export default function PdfCompressor() {
   const [result, setResult] = useState<PdfCompressionResult | null>(null);
 
   const isBusy = status === "compressing";
+  useReportBusy(isBusy ? 1 : 0);
 
   const handleFileChange = (nextFile: File | null) => {
     setError(null);

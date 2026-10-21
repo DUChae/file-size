@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { OutputFormat, UrlCaptureResponse } from "@/types/image";
 import { requestCompression } from "@/utils/compression";
+import { useReportBusy } from "@/components/ToolActivity";
 
 type CaptureStatus = "idle" | "capturing" | "captured" | "compressing" | "done" | "error";
 
@@ -89,6 +90,9 @@ export default function UrlCaptureOptimizer() {
   const [inputUrl, setInputUrl] = useState("");
   const [globalFormat, setGlobalFormat] = useState<OutputFormat>("png");
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  useReportBusy(
+    urls.filter((item) => item.status === "capturing" || item.status === "compressing").length,
+  );
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   const activeItem = urls.find((item) => item.id === activeItemId);

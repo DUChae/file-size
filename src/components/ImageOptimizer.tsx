@@ -18,6 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { formatSize } from "@/lib/format";
 import { renamePastedFiles, shouldHandlePaste } from "@/lib/clipboard";
+import { useReportBusy, useToolActive } from "@/components/ToolActivity";
 
 const MAX_FILES = 10;
 const CONCURRENCY = 2;
@@ -164,7 +165,14 @@ export default function ImageOptimizer({
     [queue.length, activeFormat, updateItem],
   );
 
+  const active = useToolActive();
+  useReportBusy(
+    queue.filter((item) => item.status === "compressing" || item.status === "uploading").length,
+  );
+
   useEffect(() => {
+    // 숨겨진 도구(다른 탭)는 붙여넣기를 받지 않는다.
+    if (!active) return;
     const onPaste = (event: ClipboardEvent) => {
       // Leave pastes into text fields alone, and ignore them while a modal is open.
       if (!shouldHandlePaste(event)) return;
@@ -178,7 +186,7 @@ export default function ImageOptimizer({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [handleFiles]);
+  }, [handleFiles, active]);
 
   const runJob = useCallback(
     async ({ item, scalePercent }: CompressionJob) => {

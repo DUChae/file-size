@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { renamePastedFiles, shouldHandlePaste } from "@/lib/clipboard";
+import { useToolActive } from "@/components/ToolActivity";
 
 interface DropzoneProps {
   onFiles: (files: File[]) => void;
@@ -49,6 +50,8 @@ export function Dropzone({
 }: DropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  // 숨겨진 도구 화면의 업로드 영역은 붙여넣기를 받지 않는다.
+  const active = useToolActive();
   // 최신 콜백을 붙여넣기 리스너에서 쓰기 위해 ref에 둔다.
   const onFilesRef = useRef(onFiles);
   useEffect(() => {
@@ -62,7 +65,7 @@ export function Dropzone({
   };
 
   useEffect(() => {
-    if (!acceptPaste || disabled) return;
+    if (!acceptPaste || disabled || !active) return;
     const onPaste = (event: ClipboardEvent) => {
       if (!shouldHandlePaste(event)) return;
       const files = Array.from(event.clipboardData?.files ?? []).filter(
@@ -76,7 +79,7 @@ export function Dropzone({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [acceptPaste, accept, disabled]);
+  }, [acceptPaste, accept, disabled, active]);
 
   return (
     <>
