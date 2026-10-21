@@ -1,31 +1,32 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// 이미지 여러 장을 지금 순서대로 A4 페이지에 맞춰 PDF 하나로 묶는 도구. 처리는 브라우저 안에서 한다.
+
+import React, { useCallback, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
 import { saveAs } from "file-saver";
+import { ArrowLeft, ArrowRight, FileOutput, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import {
-  AlertCircle,
-  ArrowDown,
-  ArrowUp,
-  CheckCircle2,
-  FileImage,
-  FileOutput,
-  FileSearch,
-  Info,
-  Loader2,
-  Trash2,
-} from "lucide-react";
-import { formatSize } from "@/lib/format";
+import { Dropzone } from "@/components/ui/dropzone";
+import { FocusTile } from "@/components/ui/focus-tile";
+import { InlineAlert } from "@/components/ui/inline-alert";
+import { ToolLayout } from "@/components/ui/tool-layout";
+import { EmptyWall, TileBoard, type BoardTile } from "@/components/TileBoard";
+import { OriginalPreview } from "@/components/ImageResultBoard";
 import { useReportBusy } from "@/components/ToolActivity";
+import { usePasteImages, useReleaseBlobUrls } from "@/components/toolHooks";
+import { MEMORY_WARNING, memoryBudget } from "@/lib/memoryBudget";
+import { readImageInfo } from "@/lib/thumbnail";
+import { formatSize } from "@/lib/format";
+import { trackClientEvent } from "@/utils/analyticsClient";
+
+const ACCEPT = "image/png,image/jpeg,image/jpg,image/webp";
 
 const A4_WIDTH_PT = 595.28;
 const A4_HEIGHT_PT = 841.89;
 const A4_WIDTH_PX = 1240;
 const A4_HEIGHT_PX = 1754;
 const JPEG_QUALITY = 0.82;
-const MAX_TOTAL_SIZE = 300 * 1024 * 1024;
 
 type ConversionStatus = "idle" | "compressing" | "done" | "error";
 type PdfImageMime = "image/jpeg" | "image/png";
@@ -36,9 +37,10 @@ interface ImageQueueItem {
   name: string;
   size: number;
   type: string;
-  previewUrl: string;
-  width: number | null;
-  height: number | null;
+  /** 타일용 작은 미리보기(blob: URL) */
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
   compressedSize?: number;
 }
 
@@ -63,16 +65,9 @@ function sanitizeFilename(name: string) {
 }
 
 function isSupportedImage(file: File) {
-  return ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type);
-}
-
-function getObjectUrlDimensions(url: string) {
-  return new Promise<{ width: number; height: number }>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-    image.onerror = () => reject(new Error("이미지 크기를 읽을 수 없습니다."));
-    image.src = url;
-  });
+  return ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
+    file.type,
+  );
 }
 
 function loadImageFromFile(file: File) {
@@ -86,7 +81,11 @@ function loadImageFromFile(file: File) {
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error(`${file.name} 이미지를 읽을 수 없습니다.`));
+      reject(
+        new Error(
+          `${file.name}을 읽지 못했습니다 · 손상된 이미지인지 확인하세요`,
+        ),
+      );
     };
     image.src = url;
   });
@@ -100,7 +99,11 @@ function hasTransparency(imageData: ImageData) {
   return false;
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, type: PdfImageMime, quality?: number) {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: PdfImageMime,
+  quality?: number,
+) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -116,7 +119,9 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: PdfImageMime, quality?: n
   });
 }
 
-async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> {
+async function prepareImageForPdf(
+  item: ImageQueueItem,
+): Promise<PreparedImage> {
   const image = await loadImageFromFile(item.file);
   const isLandscape = image.naturalWidth > image.naturalHeight;
   const targetWidthPx = isLandscape ? A4_HEIGHT_PX : A4_WIDTH_PX;
@@ -124,7 +129,9 @@ async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> 
   const pageWidth = isLandscape ? A4_HEIGHT_PT : A4_WIDTH_PT;
   const pageHeight = isLandscape ? A4_WIDTH_PT : A4_HEIGHT_PT;
   const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d", { willReadFrequently: item.type === "image/png" });
+  const context = canvas.getContext("2d", {
+    willReadFrequently: item.type === "image/png",
+  });
 
   if (!context) {
     throw new Error("Canvas context를 만들 수 없습니다.");
@@ -134,7 +141,10 @@ async function prepareImageForPdf(item: ImageQueueItem): Promise<PreparedImage> 
   canvas.height = targetHeightPx;
   context.clearRect(0, 0, canvas.width, canvas.height);
 
-  const scale = Math.min(targetWidthPx / image.naturalWidth, targetHeightPx / image.naturalHeight);
+  const scale = Math.min(
+    targetWidthPx / image.naturalWidth,
+    targetHeightPx / image.naturalHeight,
+  );
   const drawWidthPx = Math.round(image.naturalWidth * scale);
   const drawHeightPx = Math.round(image.naturalHeight * scale);
   const offsetXPx = Math.round((targetWidthPx - drawWidthPx) / 2);
@@ -194,155 +204,113 @@ async function createPdfBlob(preparedImages: PreparedImage[]) {
   return new Blob([pdfBytesCopy.buffer], { type: "application/pdf" });
 }
 
-async function trackImagePdfEvent(payload: Record<string, unknown>) {
-  try {
-    await fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    // Ignore analytics failures in the client.
-  }
-}
-
 export default function ImageToPdfConverter() {
   const [items, setItems] = useState<ImageQueueItem[]>([]);
   const [status, setStatus] = useState<ConversionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [outputSize, setOutputSize] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [acknowledgedTotal, setAcknowledgedTotal] = useState<number | null>(
+    null,
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsRef = useRef<ImageQueueItem[]>([]);
 
   const isBusy = status === "compressing";
   useReportBusy(isBusy ? 1 : 0);
-  const totalOriginalSize = useMemo(
-    () => items.reduce((sum, item) => sum + item.size, 0),
-    [items],
+  useReleaseBlobUrls(items.map((item) => item.thumbnailUrl));
+
+  const commit = useCallback(
+    (change: (current: ImageQueueItem[]) => ImageQueueItem[]) => {
+      itemsRef.current = change(itemsRef.current);
+      setItems(itemsRef.current);
+    },
+    [],
   );
-  const totalCompressedSize = useMemo(
-    () => items.reduce((sum, item) => sum + (item.compressedSize ?? 0), 0),
-    [items],
-  );
 
-  useEffect(() => {
-    itemsRef.current = items;
-  }, [items]);
+  const totalOriginalSize = items.reduce((sum, item) => sum + item.size, 0);
+  const overBudget =
+    totalOriginalSize > memoryBudget(MEMORY_WARNING.imageToPdfTotal);
+  // 확인한 뒤 파일을 더 넣어 합계가 늘면 다시 묻는다.
+  const blockedByWarning =
+    overBudget &&
+    (acknowledgedTotal === null || totalOriginalSize > acknowledgedTotal);
 
-  useEffect(() => {
-    return () => {
-      itemsRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
-    };
-  }, []);
-
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || isBusy) return;
-
-    setError(null);
+  const resetResult = () => {
     setStatus("idle");
     setOutputSize(null);
+    setError(null);
+  };
 
-    const nextFiles = Array.from(files);
-    const invalidFile = nextFiles.find((file) => !isSupportedImage(file));
-    if (invalidFile) {
-      setError("PNG, JPG, WebP 이미지만 업로드할 수 있습니다.");
-      return;
-    }
+  const handleFiles = useCallback(
+    (files: FileList | File[]) => {
+      if (isBusy) return;
+      const nextFiles = Array.from(files);
+      const supported = nextFiles.filter(isSupportedImage);
+      setNotice(
+        supported.length < nextFiles.length
+          ? `PNG·JPG·WebP만 넣을 수 있어 ${nextFiles.length - supported.length}개를 제외했습니다`
+          : null,
+      );
+      if (supported.length === 0) return;
+      resetResult();
 
-    const nextTotal = totalOriginalSize + nextFiles.reduce((sum, file) => sum + file.size, 0);
-    if (nextTotal > MAX_TOTAL_SIZE) {
-      setError(`총 업로드 용량은 ${formatSize(MAX_TOTAL_SIZE)} 이하여야 합니다.`);
-      return;
-    }
+      const createdItems: ImageQueueItem[] = supported.map((file) => ({
+        id: `${crypto.randomUUID()}-${file.name}`,
+        file,
+        name: file.name.normalize("NFC"),
+        size: file.size,
+        type: file.type === "image/jpg" ? "image/jpeg" : file.type,
+      }));
+      commit((current) => [...current, ...createdItems]);
 
-    const createdItems: ImageQueueItem[] = nextFiles.map((file) => ({
-      id: `${crypto.randomUUID()}-${file.name}`,
-      file,
-      name: file.name.normalize("NFC"),
-      size: file.size,
-      type: file.type === "image/jpg" ? "image/jpeg" : file.type,
-      previewUrl: URL.createObjectURL(file),
-      width: null,
-      height: null,
-    }));
-
-    setItems((current) => [...current, ...createdItems]);
-
-    await Promise.all(
-      createdItems.map(async (item) => {
-        try {
-          const dimensions = await getObjectUrlDimensions(item.previewUrl);
-          setItems((current) =>
-            current.map((currentItem) =>
-              currentItem.id === item.id
-                ? { ...currentItem, width: dimensions.width, height: dimensions.height }
-                : currentItem,
-            ),
-          );
-        } catch {
-          setItems((current) =>
-            current.map((currentItem) =>
-              currentItem.id === item.id ? { ...currentItem, width: 0, height: 0 } : currentItem,
-            ),
-          );
+      createdItems.forEach(async (item) => {
+        const info = await readImageInfo(item.file);
+        if (!itemsRef.current.some((entry) => entry.id === item.id)) {
+          if (info?.thumbnailUrl) URL.revokeObjectURL(info.thumbnailUrl);
+          return;
         }
-      }),
-    );
-  };
-
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!isBusy) setIsDragging(true);
-  };
-
-  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-    setIsDragging(false);
-  };
-
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(false);
-    void handleFiles(event.dataTransfer.files);
-  };
+        commit((current) =>
+          current.map((entry) =>
+            entry.id === item.id
+              ? info
+                ? { ...entry, ...info }
+                : { ...entry, width: 0, height: 0 }
+              : entry,
+          ),
+        );
+      });
+    },
+    [isBusy, commit],
+  );
+  usePasteImages(handleFiles);
 
   const removeItem = (id: string) => {
-    setItems((current) => {
-      const target = current.find((item) => item.id === id);
-      if (target) URL.revokeObjectURL(target.previewUrl);
-      return current.filter((item) => item.id !== id);
-    });
-    setStatus("idle");
-    setOutputSize(null);
+    commit((current) => current.filter((item) => item.id !== id));
+    resetResult();
   };
 
-  const moveItem = (index: number, direction: -1 | 1) => {
-    setItems((current) => {
+  const moveItem = (id: string, direction: -1 | 1) => {
+    commit((current) => {
+      const index = current.findIndex((item) => item.id === id);
       const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= current.length) return current;
-
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length)
+        return current;
       const next = [...current];
       const [target] = next.splice(index, 1);
       next.splice(nextIndex, 0, target);
       return next;
     });
-    setStatus("idle");
-    setOutputSize(null);
-    setActiveItemId(null);
+    resetResult();
   };
 
   const clearItems = () => {
-    items.forEach((item) => URL.revokeObjectURL(item.previewUrl));
-    setItems([]);
-    setStatus("idle");
-    setError(null);
-    setOutputSize(null);
-    setActiveItemId(null);
+    commit(() => []);
+    resetResult();
+    setSelectedId(null);
   };
 
   const handleConvertSingle = async (item: ImageQueueItem) => {
@@ -353,7 +321,7 @@ export default function ImageToPdfConverter() {
     setError(null);
     setOutputSize(null);
 
-    await trackImagePdfEvent({
+    await trackClientEvent({
       type: "pdf_job_started",
       status: "started",
       tool: "pdf",
@@ -364,11 +332,11 @@ export default function ImageToPdfConverter() {
 
     try {
       const prepared = await prepareImageForPdf(item);
-      setItems((current) =>
-        current.map((currentItem) =>
-          currentItem.id === item.id
-            ? { ...currentItem, compressedSize: prepared.compressedSize }
-            : currentItem,
+      commit((current) =>
+        current.map((entry) =>
+          entry.id === item.id
+            ? { ...entry, compressedSize: prepared.compressedSize }
+            : entry,
         ),
       );
 
@@ -377,7 +345,7 @@ export default function ImageToPdfConverter() {
       setOutputSize(pdfBlob.size);
       setStatus("done");
 
-      await trackImagePdfEvent({
+      await trackClientEvent({
         type: "pdf_job_success",
         status: "success",
         tool: "pdf",
@@ -390,9 +358,9 @@ export default function ImageToPdfConverter() {
       const message =
         conversionError instanceof Error
           ? conversionError.message
-          : "Image to PDF 변환에 실패했습니다.";
+          : "PDF를 만들지 못했습니다";
 
-      await trackImagePdfEvent({
+      await trackClientEvent({
         type: "pdf_job_error",
         status: "error",
         tool: "pdf",
@@ -410,15 +378,16 @@ export default function ImageToPdfConverter() {
   };
 
   const handleConvert = async () => {
-    if (items.length === 0 || isBusy) return;
+    if (items.length === 0 || isBusy || blockedByWarning) return;
 
     const orderedItems = [...items];
     setStatus("compressing");
     setActiveItemId(null);
     setError(null);
     setOutputSize(null);
+    setProgress(0);
 
-    await trackImagePdfEvent({
+    await trackClientEvent({
       type: "pdf_job_started",
       status: "started",
       tool: "pdf",
@@ -433,11 +402,12 @@ export default function ImageToPdfConverter() {
       for (const item of orderedItems) {
         const prepared = await prepareImageForPdf(item);
         preparedImages.push(prepared);
-        setItems((current) =>
-          current.map((currentItem) =>
-            currentItem.id === item.id
-              ? { ...currentItem, compressedSize: prepared.compressedSize }
-              : currentItem,
+        setProgress(preparedImages.length);
+        commit((current) =>
+          current.map((entry) =>
+            entry.id === item.id
+              ? { ...entry, compressedSize: prepared.compressedSize }
+              : entry,
           ),
         );
       }
@@ -449,12 +419,15 @@ export default function ImageToPdfConverter() {
       setOutputSize(pdfBlob.size);
       setStatus("done");
 
-      await trackImagePdfEvent({
+      await trackClientEvent({
         type: "pdf_job_success",
         status: "success",
         tool: "pdf",
         mode: "image-to-pdf",
-        fileSize: preparedImages.reduce((sum, item) => sum + item.originalSize, 0),
+        fileSize: preparedImages.reduce(
+          (sum, item) => sum + item.originalSize,
+          0,
+        ),
         optimizedSize: pdfBlob.size,
         pageCount: preparedImages.length,
       });
@@ -462,9 +435,9 @@ export default function ImageToPdfConverter() {
       const message =
         conversionError instanceof Error
           ? conversionError.message
-          : "Image to PDF 변환에 실패했습니다.";
+          : "PDF를 만들지 못했습니다";
 
-      await trackImagePdfEvent({
+      await trackClientEvent({
         type: "pdf_job_error",
         status: "error",
         tool: "pdf",
@@ -479,257 +452,268 @@ export default function ImageToPdfConverter() {
     }
   };
 
-  return (
-    <div className="max-w-5xl mx-auto space-y-16 py-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-12 pb-16 border-b border-white/5">
-        <div className="space-y-6 max-w-2xl">
-          <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-teal-300 flex items-center gap-2">
-              <FileImage className="w-4 h-4" />
-              Document Assembly
-            </h4>
-            <h2 className="text-4xl font-black text-white tracking-[-0.035em] uppercase">
-              Image to PDF
-            </h2>
+  const expandedId = items.some((item) => item.id === selectedId)
+    ? selectedId
+    : null;
+
+  const tiles: BoardTile[] = items.map((item, index) => {
+    const busyHere =
+      isBusy &&
+      (activeItemId === item.id || (!activeItemId && index === progress));
+    return {
+      id: item.id,
+      name: `${index + 1}. ${item.name}`,
+      group: "pages",
+      status: busyHere ? "processing" : "queued",
+      meta: [
+        formatSize(item.size),
+        item.width && item.height ? `${item.width}×${item.height}` : null,
+        item.compressedSize
+          ? `PDF 안 ${formatSize(item.compressedSize)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      thumbnailUrl: item.thumbnailUrl,
+      expandable: true,
+      removable: !isBusy,
+    };
+  });
+
+  const renderExpanded = (id: string) => {
+    const index = items.findIndex((item) => item.id === id);
+    const item = items[index];
+    if (!item) return null;
+    const landscape = (item.width ?? 0) > (item.height ?? 0);
+    return (
+      <FocusTile
+        media={<OriginalPreview file={item.file} name={item.name} />}
+        badge={{ tone: "neutral", label: `${index + 1} / ${items.length}쪽` }}
+        title={item.name}
+        subtitle={
+          item.width && item.height
+            ? `${item.width} × ${item.height}`
+            : undefined
+        }
+        sizeLine={formatSize(item.size)}
+        details={[
+          { label: "PDF 페이지", value: landscape ? "A4 가로" : "A4 세로" },
+          ...(item.compressedSize
+            ? [{ label: "PDF 안 용량", value: formatSize(item.compressedSize) }]
+            : []),
+        ]}
+        extra={
+          <div className="flex gap-2 [&>*]:flex-1">
+            <Button
+              size="sm"
+              onClick={() => moveItem(item.id, -1)}
+              disabled={isBusy || index === 0}
+            >
+              <ArrowLeft aria-hidden="true" />
+              앞으로
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => moveItem(item.id, 1)}
+              disabled={isBusy || index === items.length - 1}
+            >
+              뒤로
+              <ArrowRight aria-hidden="true" />
+            </Button>
           </div>
-          <p className="text-base text-slate-400 font-medium leading-relaxed">
-            PNG, JPG, WebP 이미지를 업로드한 뒤 페이지 순서를 조정하고, 현재 순서 그대로 A4 PDF 1개를 생성합니다. 가로 이미지는 A4 가로 페이지, 세로 이미지는 A4 세로 페이지에 맞춰 압축됩니다.
+        }
+        actions={
+          <>
+            <Button
+              variant="danger"
+              onClick={() => removeItem(item.id)}
+              disabled={isBusy}
+            >
+              <Trash2 aria-hidden="true" />
+              제거
+            </Button>
+            <Button
+              variant="inverse"
+              onClick={() => void handleConvertSingle(item)}
+              disabled={isBusy && activeItemId !== item.id}
+              loading={activeItemId === item.id}
+            >
+              <FileOutput aria-hidden="true" />이 장만 PDF
+            </Button>
+          </>
+        }
+      />
+    );
+  };
+
+  const summary =
+    items.length === 0
+      ? "PNG·JPG·WebP · 지금 순서대로 A4 PDF 하나로 묶습니다"
+      : [
+          `${items.length}쪽`,
+          formatSize(totalOriginalSize),
+          outputSize !== null &&
+            status === "done" &&
+            `PDF ${formatSize(outputSize)}`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+  return (
+    <ToolLayout
+      title="이미지 → PDF"
+      summary={summary}
+      settingsTitle="PDF 설정"
+      settings={
+        <div className="space-y-3 text-sm">
+          <p>
+            세로 이미지는 A4 세로, 가로 이미지는 A4 가로 페이지에 비율을 지켜
+            맞춥니다.
+          </p>
+          <p className="text-xs text-muted">
+            사진은 JPEG(품질 82)로 다시 저장하고, 투명한 부분이 있는 PNG는 PNG로
+            넣습니다. 페이지 순서는 목록 순서와 같습니다.
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-4 shrink-0">
-          <label className={cn("cursor-pointer", isBusy && "pointer-events-none opacity-60")}>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
-              multiple
-              className="hidden"
-              disabled={isBusy}
-              onChange={(event) => {
-                void handleFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-            <Button
-              variant="secondary"
-              asChild
-              className="rounded-full border-white/10 hover:bg-white/5 text-white h-14 px-10"
-            >
-              <div className="cursor-pointer font-black text-xs tracking-widest">
-                <FileSearch className="w-5 h-5 mr-3" />
-                SELECT IMAGES
-              </div>
-            </Button>
-          </label>
+      }
+      settingsFooter={
+        <Dropzone
+          compact
+          accept={ACCEPT}
+          disabled={isBusy}
+          onFiles={handleFiles}
+          title="이미지 추가"
+          hint="끌어 놓기·클릭·Ctrl+V"
+        />
+      }
+      onDropFiles={handleFiles}
+      primary={
+        <Button
+          variant="primary"
+          onClick={() => void handleConvert()}
+          disabled={items.length === 0 || blockedByWarning}
+          loading={isBusy && !activeItemId}
+        >
+          {isBusy && !activeItemId
+            ? `PDF 만드는 중 ${progress} / ${items.length}`
+            : `PDF 만들기${items.length > 0 ? ` (${items.length}쪽)` : ""}`}
+        </Button>
+      }
+      actions={
+        <>
           <Button
-            variant="primary"
-            onClick={handleConvert}
-            disabled={items.length === 0 || isBusy}
-            className="rounded-2xl h-14 px-8 text-xs font-black tracking-widest active:scale-[0.98]"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isBusy}
+            aria-keyshortcuts="Control+V"
           >
-            {isBusy ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-                PROCESSING
-              </>
-            ) : (
-              <>
-                <FileOutput className="w-5 h-5 mr-3" />
-                전체 PDF 변환
-              </>
-            )}
+            <Plus aria-hidden="true" />
+            이미지 추가 (Ctrl+V)
           </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
-          <div className="text-xs font-black text-slate-600 uppercase tracking-widest">
-            Page Order
-          </div>
-          <div className="text-sm text-white font-bold flex items-center gap-3">
-            <div className={cn("w-2 h-2 rounded-full", items.length ? "bg-teal-300" : "bg-slate-800")} />
-            {items.length ? `${items.length} pages ready` : "No images"}
-          </div>
-        </div>
-        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
-          <div className="text-xs font-black text-slate-600 uppercase tracking-widest">
-            Source Size
-          </div>
-          <div className="text-3xl font-black text-white">{formatSize(totalOriginalSize)}</div>
-        </div>
-        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 space-y-4">
-          <div className="text-xs font-black text-slate-600 uppercase tracking-widest">
-            Job Status
-          </div>
-          <div
-            className={cn(
-              "text-xs font-black flex items-center gap-3 uppercase tracking-widest",
-              status === "done"
-                ? "text-green-500"
-                : status === "error"
-                  ? "text-red-500"
-                  : status === "compressing"
-                    ? "text-teal-300"
-                    : "text-slate-500",
-            )}
+          <span
+            className="mx-1 hidden h-6 w-px bg-line sm:block"
+            aria-hidden="true"
+          />
+          <Button
+            variant="ghost"
+            onClick={clearItems}
+            disabled={isBusy || items.length === 0}
           >
-            {status === "idle" && "Arrange pages"}
-            {status === "compressing" && <Loader2 className="w-4 h-4 animate-spin" />}
-            {status === "compressing" && "Compressing..."}
-            {status === "done" && <CheckCircle2 className="w-4 h-4" />}
-            {status === "done" && `Complete ${outputSize ? formatSize(outputSize) : ""}`}
-            {status === "error" && <AlertCircle className="w-4 h-4" />}
-            {status === "error" && "Engine Error"}
-          </div>
-        </div>
-      </div>
+            비우기
+          </Button>
+        </>
+      }
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={ACCEPT}
+        hidden
+        tabIndex={-1}
+        onChange={(event) => {
+          if (event.target.files) handleFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      <p className="sr-only" aria-live="polite">
+        {status === "done" && outputSize !== null
+          ? `PDF 저장 완료, ${formatSize(outputSize)}`
+          : status === "error"
+            ? `실패, ${error}`
+            : ""}
+      </p>
 
-      {error && (
-        <div className="rounded-2xl border border-red-500/10 bg-red-500/[0.04] p-8 flex items-start gap-6 animate-fade-in shadow-2xl">
-          <AlertCircle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
-          <div className="space-y-2">
-            <h5 className="text-sm font-black text-red-500 uppercase tracking-widest">
-              System Alert
-            </h5>
-            <p className="text-base text-red-200/80 font-medium leading-relaxed">{error}</p>
-          </div>
-        </div>
-      )}
-
-      <div
-        className={cn(
-          "space-y-5 rounded-3xl border border-transparent transition-all",
-          isDragging && "border-teal-300/40 bg-teal-300/[0.04] p-4",
+      <div className="space-y-6">
+        {notice && (
+          <InlineAlert
+            tone="warning"
+            title={notice}
+            onDismiss={() => setNotice(null)}
+          />
         )}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4 text-slate-500 bg-white/[0.01] p-5 rounded-2xl border border-white/5">
-            <Info className="w-5 h-5 shrink-0" />
-            <p className="text-xs font-bold uppercase tracking-[0.15em] leading-relaxed">
-              The visible list order becomes the PDF page order. Conversion starts only after pressing PDF 변환.
-            </p>
-          </div>
-          {items.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearItems}
-              disabled={isBusy}
-              className="self-start md:self-auto rounded-full text-slate-500 hover:bg-white/5 hover:text-white"
-            >
-              <Trash2 className="w-4 h-4" />
-              Clear
-            </Button>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          {items.length === 0 ? (
-            <div
-              className={cn(
-                "rounded-3xl border border-dashed bg-white/[0.02] p-12 text-center transition-all",
-                isDragging ? "border-teal-300/60" : "border-white/10",
-              )}
-            >
-              <div className="space-y-3">
-                <div className="text-sm font-black text-slate-500 uppercase tracking-widest">
-                  Drop PNG, JPG, or WebP images
-                </div>
-                <div className="text-xs font-bold uppercase tracking-[0.15em] text-slate-700">
-                  or use SELECT IMAGES
-                </div>
-              </div>
-            </div>
-          ) : (
-            items.map((item, index) => (
-              <div
-                key={item.id}
-                className="grid grid-cols-[64px_1fr] items-center gap-5 rounded-2xl border border-white/5 bg-white/[0.02] p-4 md:grid-cols-[64px_1fr_auto]"
+        {blockedByWarning && (
+          <InlineAlert
+            tone="warning"
+            title={`이미지 합계가 ${formatSize(totalOriginalSize)}입니다`}
+            actions={
+              <Button
+                size="sm"
+                onClick={() => setAcknowledgedTotal(totalOriginalSize)}
               >
-                <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-white/10 bg-black">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.previewUrl}
-                    alt=""
-                    className="h-full w-full object-contain"
-                  />
-                  <div className="absolute left-1 top-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-black text-white">
-                    {index + 1}
-                  </div>
-                </div>
-                <div className="min-w-0 space-y-2">
-                  <div className="truncate text-sm font-black text-white">{item.name}</div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold uppercase tracking-widest text-slate-600">
-                    <span>{formatSize(item.size)}</span>
-                    {item.width && item.height ? <span>{item.width} x {item.height}</span> : null}
-                    {item.compressedSize ? <span>PDF asset {formatSize(item.compressedSize)}</span> : null}
-                  </div>
-                </div>
-                <div className="col-span-2 flex items-center justify-end gap-2 md:col-span-1">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      void handleConvertSingle(item);
-                    }}
-                    disabled={isBusy}
-                    className="rounded-full border-white/10 bg-white/[0.02] px-3 text-xs font-black text-slate-300 hover:bg-white/5 hover:text-white"
-                    title="Convert this image to PDF"
-                  >
-                    {activeItemId === item.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <FileOutput className="w-4 h-4" />
-                    )}
-                    PDF
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    iconOnly
-                    onClick={() => moveItem(index, -1)}
-                    disabled={isBusy || index === 0}
-                    className="rounded-full text-slate-500 hover:bg-white/5 hover:text-white"
-                    title="Move up"
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    iconOnly
-                    onClick={() => moveItem(index, 1)}
-                    disabled={isBusy || index === items.length - 1}
-                    className="rounded-full text-slate-500 hover:bg-white/5 hover:text-white"
-                    title="Move down"
-                  >
-                    <ArrowDown className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    iconOnly
-                    onClick={() => removeItem(item.id)}
-                    disabled={isBusy}
-                    className="rounded-full text-slate-500 hover:bg-red-500/10 hover:text-red-400"
-                    title="Remove"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+                계속하기
+              </Button>
+            }
+          >
+            모든 이미지를 브라우저 메모리에서 다시 저장한 뒤 PDF로 묶습니다.
+            메모리가 부족하면 탭이 멈추거나 새로고침될 수 있습니다.
+          </InlineAlert>
+        )}
+        {error && (
+          <InlineAlert
+            tone="danger"
+            title={error}
+            actions={
+              <Button size="sm" onClick={() => void handleConvert()}>
+                다시 시도
+              </Button>
+            }
+          />
+        )}
+        {status === "done" && outputSize !== null && (
+          <InlineAlert
+            tone="success"
+            title={`PDF를 저장했습니다 · ${formatSize(outputSize)}`}
+          >
+            순서를 바꾸거나 이미지를 더해 다시 만들 수 있습니다.
+          </InlineAlert>
+        )}
 
-      {totalCompressedSize > 0 && (
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
-          Compressed image assets: {formatSize(totalCompressedSize)}
-        </div>
-      )}
-    </div>
+        {items.length === 0 ? (
+          <EmptyWall
+            title="페이지 순서"
+            first={
+              <Dropzone
+                accept={ACCEPT}
+                onFiles={handleFiles}
+                title="이미지를 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
+                hint="눌러서 파일 선택 · PNG·JPG·WebP · 넣은 순서가 페이지 순서가 됩니다"
+                className="h-full min-h-0 py-6"
+              />
+            }
+          />
+        ) : (
+          <TileBoard
+            tiles={tiles}
+            groups={[{ key: "pages", title: "페이지 순서" }]}
+            expandedId={expandedId}
+            onExpand={setSelectedId}
+            renderExpanded={renderExpanded}
+            onRemove={removeItem}
+            hint="타일에서 방향키로 이동 · 누르면 순서를 바꾸는 버튼이 나옵니다 · Delete로 제거"
+          />
+        )}
+      </div>
+    </ToolLayout>
   );
 }

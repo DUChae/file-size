@@ -19,6 +19,10 @@ interface MediaTileProps {
   thumbnailUrl?: string;
   /** PDF 페이지 캔버스처럼 이미지가 아닌 썸네일 */
   thumbnail?: React.ReactNode;
+  /** 긴 페이지 캡처처럼 위쪽을 기준으로 자른다 */
+  thumbnailTop?: boolean;
+  /** 문서 페이지처럼 잘리지 않게 전체를 보여 준다 */
+  thumbnailContain?: boolean;
   /** 이름 아래 한 줄. 예: "2.4 MB · 압축 중 62%" */
   meta?: React.ReactNode;
   /** 0~1. 처리 중인데 값이 없으면 무한 진행 막대를 그린다. */
@@ -34,6 +38,8 @@ interface MediaTileProps {
   checkerboard?: boolean;
   /** 썸네일 오른쪽 위에 겹치는 작은 버튼(삭제 등) */
   actions?: React.ReactNode;
+  /** 상태가 의미 없는 미리보기(PDF 페이지 등)에서는 상태를 읽어 주지 않는다 */
+  announceStatus?: boolean;
   className?: string;
 }
 
@@ -42,6 +48,8 @@ export function MediaTile({
   status,
   thumbnailUrl,
   thumbnail,
+  thumbnailTop,
+  thumbnailContain,
   meta,
   progress,
   error,
@@ -51,6 +59,7 @@ export function MediaTile({
   dimmed,
   checkerboard,
   actions,
+  announceStatus = true,
   className,
 }: MediaTileProps) {
   const percent =
@@ -59,16 +68,12 @@ export function MediaTile({
       : Math.round(Math.min(Math.max(progress, 0), 1) * 100);
 
   return (
-    <article
-      className={cn(
-        "group relative min-w-0 transition-opacity duration-200",
-        dimmed && "opacity-55",
-        className,
-      )}
-    >
+    <article className={cn("group relative min-w-0", className)}>
       <div
         className={cn(
-          "relative aspect-[16/10] overflow-hidden rounded-lg border bg-surface",
+          // 어둡게 할 때도 글자 대비를 지키려고 썸네일만 흐리게 한다.
+          "relative aspect-[16/10] overflow-hidden rounded-lg border bg-surface transition-opacity duration-200",
+          dimmed && "opacity-55",
           selected ? "border-accent ring-1 ring-accent" : "border-line",
           checkerboard &&
             "bg-[conic-gradient(var(--color-surface-2)_25%,var(--color-surface)_0_50%,var(--color-surface-2)_0_75%,var(--color-surface)_0)] bg-[length:16px_16px]",
@@ -81,7 +86,11 @@ export function MediaTile({
             <img
               src={thumbnailUrl}
               alt=""
-              className="absolute inset-0 size-full object-cover"
+              className={cn(
+                "absolute inset-0 size-full",
+                thumbnailContain ? "object-contain p-2" : "object-cover",
+                thumbnailTop && "object-top",
+              )}
               draggable={false}
             />
           ))}
@@ -110,8 +119,8 @@ export function MediaTile({
         )}
 
         {status === "error" && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg/80 p-3 text-center">
-            <p className="text-sm font-semibold text-danger">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg/80 px-3 pb-3 pt-11 text-center">
+            <p className="line-clamp-3 text-sm font-semibold text-danger">
               {error ?? "처리하지 못했습니다"}
             </p>
             {onRetry && (
@@ -135,7 +144,7 @@ export function MediaTile({
               type="button"
               onClick={onSelect}
               aria-pressed={selected}
-              className="text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
+              className="text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
             >
               {name}
             </button>
@@ -144,7 +153,9 @@ export function MediaTile({
           )}
         </p>
         <p className="truncate text-xs text-muted">
-          <span className="sr-only">{STATUS_LABEL[status]} · </span>
+          {announceStatus && (
+            <span className="sr-only">{STATUS_LABEL[status]} · </span>
+          )}
           {meta}
         </p>
       </div>

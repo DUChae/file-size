@@ -48,20 +48,25 @@ function ToolPanel({
   toolKey,
   active,
   onBusy,
+  subnav,
 }: {
   toolKey: ToolKey;
   active: boolean;
   onBusy: (key: ToolKey, count: number) => void;
+  subnav?: React.ReactNode;
 }) {
   const reportBusy = useCallback(
     (count: number) => onBusy(toolKey, count),
     [onBusy, toolKey],
   );
-  const activity = useMemo(() => ({ active, reportBusy }), [active, reportBusy]);
+  const activity = useMemo(
+    () => ({ active, reportBusy, subnav }),
+    [active, reportBusy, subnav],
+  );
 
   return (
     <ToolActivityProvider value={activity}>
-      <div hidden={!active} className="relative min-h-[500px] animate-fade-in">
+      <div hidden={!active} className="animate-fade-in">
         {renderTool(toolKey)}
       </div>
     </ToolActivityProvider>
@@ -73,23 +78,32 @@ function ToolPanel({
  * 다른 도구·피드백·대시보드에 갔다 와도 큐와 결과, 진행 중인 요청이 그대로 남는다.
  * 결과 blob URL은 각 도구가 삭제·비우기·언마운트 때 해제하므로, 이 틀이 사라질 때(사이트를 떠날 때) 함께 정리된다.
  */
-export default function ToolWorkspace({ children }: { children: React.ReactNode }) {
+export default function ToolWorkspace({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const activeKey = toolKeyFromPath(pathname);
 
-  const [visited, setVisited] = useState<ToolKey[]>(activeKey ? [activeKey] : []);
+  const [visited, setVisited] = useState<ToolKey[]>(
+    activeKey ? [activeKey] : [],
+  );
   const [lastConvert, setLastConvert] = useState<ConvertMode>(
     activeKey && isConvertMode(activeKey) ? activeKey : "pdf-to-png",
   );
   // 경로가 바뀐 렌더에서 바로 반영해 새 도구가 한 박자 늦게 뜨지 않게 한다.
-  if (activeKey && !visited.includes(activeKey)) setVisited([...visited, activeKey]);
+  if (activeKey && !visited.includes(activeKey))
+    setVisited([...visited, activeKey]);
   if (activeKey && isConvertMode(activeKey) && activeKey !== lastConvert) {
     setLastConvert(activeKey);
   }
 
   const [busy, setBusy] = useState<BusyMap>({});
   const reportBusy = useCallback((key: ToolKey, count: number) => {
-    setBusy((prev) => ((prev[key] ?? 0) === count ? prev : { ...prev, [key]: count }));
+    setBusy((prev) =>
+      (prev[key] ?? 0) === count ? prev : { ...prev, [key]: count },
+    );
   }, []);
 
   const toolBusy = useMemo(() => {
@@ -105,12 +119,28 @@ export default function ToolWorkspace({ children }: { children: React.ReactNode 
   const tools = useMemo(
     () =>
       TOOLS.map((tool) =>
-        tool.id === "convert" ? { ...tool, href: `/convert/${lastConvert}` } : tool,
+        tool.id === "convert"
+          ? { ...tool, href: `/convert/${lastConvert}` }
+          : tool,
       ),
     [lastConvert],
   );
 
   const activeTool = activeKey ? toolIdOf(activeKey) : undefined;
+  const convertTabs = useMemo(
+    () => (
+      <ToolTabs
+        items={CONVERT_MODES}
+        activeId={
+          activeKey && isConvertMode(activeKey) ? activeKey : lastConvert
+        }
+        busy={busy}
+        variant="sub"
+        aria-label="변환 종류"
+      />
+    ),
+    [activeKey, lastConvert, busy],
+  );
   const section = pathname.startsWith("/feedback")
     ? "feedback"
     : pathname.startsWith("/admin")
@@ -118,31 +148,21 @@ export default function ToolWorkspace({ children }: { children: React.ReactNode 
       : undefined;
 
   return (
-    <AppShell tools={tools} activeTool={activeTool} activeSection={section} busy={toolBusy}>
-      <div
-        hidden={!activeKey}
-        className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8"
-      >
-        {activeKey && (
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <h1 className="text-title font-bold tracking-[-0.02em]">
-              {TOOLS.find((tool) => tool.id === activeTool)?.label}
-            </h1>
-            {activeKey && isConvertMode(activeKey) && (
-              <ToolTabs
-                items={CONVERT_MODES}
-                activeId={activeKey}
-                busy={busy}
-                variant="sub"
-                aria-label="변환 종류"
-              />
-            )}
-          </div>
-        )}
-        {visited.map((key) => (
-          <ToolPanel key={key} toolKey={key} active={key === activeKey} onBusy={reportBusy} />
-        ))}
-      </div>
+    <AppShell
+      tools={tools}
+      activeTool={activeTool}
+      activeSection={section}
+      busy={toolBusy}
+    >
+      {visited.map((key) => (
+        <ToolPanel
+          key={key}
+          toolKey={key}
+          active={key === activeKey}
+          onBusy={reportBusy}
+          subnav={isConvertMode(key) ? convertTabs : undefined}
+        />
+      ))}
       {children}
     </AppShell>
   );

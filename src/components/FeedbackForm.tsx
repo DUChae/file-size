@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { InlineAlert } from "@/components/ui/inline-alert";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 type RequestType = "bug" | "improvement";
 
@@ -14,6 +17,12 @@ const initialState: SubmitState = {
   message: "",
 };
 
+const TITLE_MAX = 120;
+const DETAILS_MAX = 4000;
+
+const FIELD_CLASS =
+  "w-full rounded-lg border border-line bg-bg px-3 py-2.5 text-base text-text outline-none transition-colors hover:border-line-strong focus:border-text";
+
 export default function FeedbackForm() {
   const [requestType, setRequestType] = useState<RequestType>("bug");
   const [title, setTitle] = useState("");
@@ -23,10 +32,7 @@ export default function FeedbackForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setSubmitState({
-      status: "submitting",
-      message: "제출 중입니다. 잠시만 기다려 주세요.",
-    });
+    setSubmitState({ status: "submitting", message: "" });
 
     try {
       const response = await fetch("/api/feedback", {
@@ -47,7 +53,7 @@ export default function FeedbackForm() {
       };
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "제출에 실패했습니다.");
+        throw new Error(data.error || "제출하지 못했습니다");
       }
 
       setTitle("");
@@ -55,14 +61,12 @@ export default function FeedbackForm() {
       setRequestType("bug");
       setSubmitState({
         status: "success",
-        message:
-          "제보가 정상적으로 제출되었습니다. 관리자 페이지 Feedback 탭에서 바로 확인해 주세요.",
+        message: "운영자가 대시보드의 피드백 탭에서 바로 확인합니다.",
       });
     } catch (error) {
       setSubmitState({
         status: "error",
-        message:
-          error instanceof Error ? error.message : "제출에 실패했습니다.",
+        message: error instanceof Error ? error.message : "제출하지 못했습니다",
       });
     }
   }
@@ -70,86 +74,96 @@ export default function FeedbackForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-tile border border-line bg-surface p-6 md:p-8"
+      className="space-y-6 rounded-tile border border-line bg-surface p-5 md:p-8"
     >
-      <div className="grid gap-8">
-        <div>
-          <p className="mb-3 text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
-            요청 유형
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setRequestType("bug")}
-              className={`rounded-2xl border px-4 py-3 text-sm font-black transition-colors ${
-                requestType === "bug"
-                  ? "border-blue-400/60 bg-blue-500/15 text-white"
-                  : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
-              }`}
-            >
-              버그 제보
-            </button>
-            <button
-              type="button"
-              onClick={() => setRequestType("improvement")}
-              className={`rounded-2xl border px-4 py-3 text-sm font-black transition-colors ${
-                requestType === "improvement"
-                  ? "border-blue-400/60 bg-blue-500/15 text-white"
-                  : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
-              }`}
-            >
-              개선 요청
-            </button>
-          </div>
-        </div>
+      <div>
+        <span
+          id="feedback-type-label"
+          className="mb-2 block text-xs font-semibold text-muted"
+        >
+          요청 유형
+        </span>
+        <SegmentedControl
+          aria-labelledby="feedback-type-label"
+          value={requestType}
+          onValueChange={setRequestType}
+          options={[
+            { value: "bug", label: "버그 제보" },
+            { value: "improvement", label: "개선 요청" },
+          ]}
+          className="max-w-sm"
+        />
+      </div>
 
-        <label className="grid gap-3">
-          <span className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
-            제목
-          </span>
-          <input
-            required
-            maxLength={120}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="버그나 개선 요청 제목을 입력해 주세요"
-            className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
-          />
-        </label>
-
-        <label className="grid gap-3">
-          <span className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-400">
-            상세 내용
-          </span>
-          <textarea
-            required
-            rows={7}
-            maxLength={4000}
-            value={details}
-            onChange={(event) => setDetails(event.target.value)}
-            placeholder="무슨 문제가 있었는지, 기대한 동작은 무엇이었는지, 또는 어떤 개선이 필요한지 자세히 적어 주세요"
-            className="resize-none rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
-          />
-        </label>
-
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <p
-            className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
-              submitState.status === "error"
-                ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
-                : submitState.status === "success"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                  : "border-white/10 bg-white/5 text-slate-400"
-            }`}
-          ></p>
-          <button
-            type="submit"
-            disabled={submitState.status === "submitting"}
-            className="rounded-2xl bg-white px-6 py-3 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02] disabled:cursor-wait disabled:opacity-70"
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <label
+            htmlFor="feedback-title"
+            className="text-xs font-semibold text-muted"
           >
-            {submitState.status === "submitting" ? "제출 중..." : "제출하기"}
-          </button>
+            제목
+          </label>
+          <span className="text-xs text-muted">
+            {title.length} / {TITLE_MAX}
+          </span>
         </div>
+        <input
+          id="feedback-title"
+          required
+          maxLength={TITLE_MAX}
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="예: AVIF 변환이 1분 넘게 끝나지 않아요"
+          className={FIELD_CLASS}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <label
+            htmlFor="feedback-details"
+            className="text-xs font-semibold text-muted"
+          >
+            상세 내용
+          </label>
+          <span className="text-xs text-muted">
+            {details.length} / {DETAILS_MAX}
+          </span>
+        </div>
+        <textarea
+          id="feedback-details"
+          required
+          rows={7}
+          maxLength={DETAILS_MAX}
+          value={details}
+          onChange={(event) => setDetails(event.target.value)}
+          placeholder="어떤 파일로 무엇을 했는지, 기대한 결과와 실제 결과를 적어 주세요"
+          className={`${FIELD_CLASS} resize-y`}
+        />
+      </div>
+
+      {submitState.status === "success" && (
+        <InlineAlert tone="success" title="제출했습니다">
+          {submitState.message}
+        </InlineAlert>
+      )}
+      {submitState.status === "error" && (
+        <InlineAlert
+          tone="danger"
+          title={`제출하지 못했습니다 · ${submitState.message}`}
+        >
+          입력한 내용은 그대로 남아 있습니다. 잠시 뒤 다시 제출해 주세요.
+        </InlineAlert>
+      )}
+
+      <div className="flex justify-end">
+        <Button
+          type="submit"
+          variant="primary"
+          loading={submitState.status === "submitting"}
+        >
+          {submitState.status === "submitting" ? "제출 중" : "제출하기"}
+        </Button>
       </div>
     </form>
   );

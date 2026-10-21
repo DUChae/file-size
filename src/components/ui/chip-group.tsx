@@ -56,7 +56,7 @@ export function ChipGroup<T extends string>({
             disabled={disabled || option.disabled}
             onClick={() => onValueChange(option.value)}
             className={cn(
-              "h-8 rounded-md border px-2 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45",
+              "h-8 whitespace-nowrap rounded-md border px-1 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45",
               checked
                 ? "border-text bg-bg font-semibold text-text"
                 : "border-line bg-bg text-muted hover:border-line-strong hover:text-text",

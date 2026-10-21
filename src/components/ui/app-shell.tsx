@@ -36,10 +36,10 @@ export function AppShell({
       >
         본문으로 건너뛰기
       </a>
-      <header className="sticky top-0 z-30 flex flex-wrap items-center gap-x-10 border-b border-line bg-bg px-4 md:h-14 md:flex-nowrap md:px-6">
+      <header className="sticky top-0 z-30 flex flex-wrap items-center gap-x-6 border-b border-line bg-bg px-4 md:h-14 md:flex-nowrap md:px-6">
         <Link
           href="/"
-          className="flex h-14 items-center font-display text-[1.625rem] leading-none tracking-[0.04em] text-text"
+          className="flex h-14 shrink-0 items-center font-display text-[1.625rem] leading-none tracking-[0.04em] text-text"
         >
           OptiStream
         </Link>
@@ -48,10 +48,10 @@ export function AppShell({
           activeId={activeTool}
           busy={busy}
           aria-label="도구"
-          className="order-last -mx-4 h-12 w-[calc(100%+2rem)] border-t border-line px-2 md:order-none md:mx-0 md:h-full md:w-auto md:min-w-0 md:border-t-0 md:px-0"
+          className="order-last -mx-4 h-12 w-[calc(100%+2rem)] border-t border-line px-2 md:order-none md:mx-0 md:h-full md:w-auto md:min-w-0 md:flex-1 md:border-t-0 md:px-0 lg:ml-4"
         />
-        <nav aria-label="보조 메뉴" className="ml-auto">
-          <ul className="flex gap-1">
+        <nav aria-label="보조 메뉴" className="ml-auto shrink-0">
+          <ul className="flex">
             {SECONDARY_LINKS.map((link) => {
               const active = link.id === activeSection;
               return (
@@ -60,7 +60,7 @@ export function AppShell({
                     href={link.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "flex h-10 items-center rounded-md px-3 text-sm transition-colors duration-150",
+                      "flex h-10 items-center whitespace-nowrap rounded-md px-2.5 text-sm transition-colors duration-150 sm:px-3",
                       active
                         ? "bg-surface font-semibold text-text"
                         : "text-muted hover:bg-surface hover:text-text",

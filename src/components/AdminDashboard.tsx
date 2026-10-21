@@ -1,5 +1,7 @@
 "use client";
 
+// 운영자용 통계 대시보드와 피드백 목록
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
@@ -13,40 +15,48 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { CheckCircle2, ChevronDown, Trash2, XCircle } from "lucide-react";
 import { DashboardStats } from "@/lib/analytics";
 import { FeedbackSubmission } from "@/lib/feedback";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  BarChart3, 
-  Calendar, 
-  Users, 
-  Files, 
-  CheckCircle2, 
-  AlertCircle, 
-  Image as ImageIcon, 
-  FileText, 
-  Save, 
-  Trash2, 
-  Loader2,
-  Clock,
-  Activity,
-  MousePointer2
-} from "lucide-react";
+import { Dialog } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { InlineAlert } from "@/components/ui/inline-alert";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import { formatSize } from "@/lib/format";
 
 type RangeKey = "7d" | "30d" | "365d";
 type AdminTab = "analytics" | "feedback";
 
+// 차트 색: 중립 + 노랑 + 상태색(성공·실패). 상태색은 아이콘·라벨과 함께만 쓴다.
+const CHART = {
+  grid: "#2C2F36",
+  axis: "#A1A1AA",
+  accent: "#FFD43B",
+  neutral: "#A1A1AA",
+  success: "#4ADE80",
+  danger: "#F87171",
+  surface: "#1A1C21",
+  bg: "#0E0F12",
+};
+
+const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
+  { value: "7d", label: "7일" },
+  { value: "30d", label: "30일" },
+  { value: "365d", label: "1년" },
+];
+const SPARK_DAYS = 14;
+const LONG_TEXT = 140;
+
 function formatTimestamp(value: string) {
   try {
     return new Date(value).toLocaleString("ko-KR", {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } catch {
     return value;
@@ -61,65 +71,116 @@ function formatCount(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
-function StatCard({ label, value, icon: Icon, subValue }: { label: string; value: number | string; icon: React.ComponentType<{ className?: string }>; subValue?: string }) {
+/** 최근 며칠의 막대. 마지막 날만 밝게 그려 오늘의 위치를 보여 준다. */
+function Spark({ values, label }: { values: number[]; label: string }) {
+  if (values.length === 0) return null;
+  const max = Math.max(1, ...values);
   return (
-    <Card className="p-5 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-          {label}
-        </div>
-        <div className="p-2 rounded-lg bg-white/5 text-slate-400">
-          <Icon className="w-3.5 h-3.5" />
-        </div>
-      </div>
-      <div className="space-y-1">
-        <div className="text-2xl font-black text-white tracking-tighter">
-          {typeof value === 'number' ? formatCount(value) : value}
-        </div>
-        {subValue && <div className="text-[10px] font-bold text-slate-600">{subValue}</div>}
-      </div>
-    </Card>
+    <svg
+      role="img"
+      aria-label={`${label} 최근 ${values.length}일: ${values.join(", ")}`}
+      viewBox={`0 0 ${values.length * 6} 24`}
+      className="h-6 w-full"
+      preserveAspectRatio="none"
+    >
+      {values.map((value, index) => {
+        const height = Math.max(1, (value / max) * 24);
+        return (
+          <rect
+            key={index}
+            x={index * 6}
+            y={24 - height}
+            width={4}
+            height={height}
+            rx={1}
+            fill={index === values.length - 1 ? CHART.accent : CHART.grid}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
-function ChartCard({
-  title,
-  subtitle,
-  empty,
-  children,
-  icon: Icon
+function StatTile({
+  label,
+  value,
+  spark,
+  note,
 }: {
-  title: string;
-  subtitle: string;
-  empty?: boolean;
-  children: ReactNode;
-  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  spark?: number[];
+  note?: string;
 }) {
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="border-b border-white/5 bg-white/[0.01] p-6">
-        <div className="flex items-center gap-3">
-           <div className="p-2 rounded-xl bg-blue-600/10 text-blue-500">
-             <Icon className="w-4 h-4" />
-           </div>
-           <div>
-             <CardTitle className="text-sm font-black tracking-tight text-white uppercase">{title}</CardTitle>
-             <CardDescription className="text-[11px] text-slate-500 font-medium mt-0.5">{subtitle}</CardDescription>
-           </div>
+    <div className="flex flex-col gap-2 rounded-tile border border-line bg-surface p-5">
+      <p className="text-sm text-muted">{label}</p>
+      <p className="font-display text-display tracking-[0.01em]">{value}</p>
+      {spark ? (
+        <Spark values={spark} label={label} />
+      ) : (
+        <div className="h-6" aria-hidden />
+      )}
+      {note && <p className="text-xs text-muted">{note}</p>}
+    </div>
+  );
+}
+
+function LegendItem({
+  color,
+  label,
+  icon,
+}: {
+  color: string;
+  label: string;
+  icon?: ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+      <span
+        className="size-2.5 rounded-sm"
+        style={{ backgroundColor: color }}
+        aria-hidden
+      />
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+function ChartSection({
+  title,
+  description,
+  legend,
+  empty,
+  children,
+}: {
+  title: string;
+  description: string;
+  legend?: ReactNode;
+  empty?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-tile border border-line bg-surface p-5">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold">{title}</h2>
+          <p className="text-xs text-muted">{description}</p>
         </div>
-      </CardHeader>
-      <CardContent className="p-6">
-        <div className="h-[300px] w-full">
-          {empty ? (
-            <div className="flex h-full items-center justify-center text-xs font-bold text-slate-700 uppercase tracking-widest">
-              No Data Available
-            </div>
-          ) : (
-            children
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        {legend && <div className="flex flex-wrap gap-4">{legend}</div>}
+      </div>
+      <div className="h-[260px] w-full">
+        {empty ? (
+          <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+            <p className="text-sm font-semibold">이 기간에 데이터가 없습니다</p>
+            <p className="text-xs text-muted">위에서 기간을 넓혀 보세요.</p>
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -132,29 +193,25 @@ function DashboardTooltip({
   payload?: Array<{ color?: string; name?: string; value?: number | string }>;
   label?: string;
 }) {
-  if (!active || !payload?.length) {
-    return null;
-  }
+  if (!active || !payload?.length) return null;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/90 p-3 shadow-2xl backdrop-blur-md">
-      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-2 border-b border-white/5 pb-2">
-        {label}
-      </div>
-      <div className="space-y-1.5">
+    <div className="rounded-lg border border-line-strong bg-surface-2 px-3 py-2 text-xs">
+      <p className="mb-1.5 font-semibold">{label}</p>
+      <div className="space-y-1">
         {payload.map((item) => (
           <div
             key={item.name}
-            className="flex items-center justify-between gap-6 text-[11px]"
+            className="flex items-center justify-between gap-6"
           >
-            <div className="flex items-center gap-2 text-slate-300">
+            <span className="flex items-center gap-1.5 text-muted">
               <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: item.color ?? "#fff" }}
+                className="size-2 rounded-sm"
+                style={{ backgroundColor: item.color ?? CHART.neutral }}
               />
-              <span className="font-bold">{item.name}</span>
-            </div>
-            <span className="font-black text-white">
+              {item.name}
+            </span>
+            <span className="font-semibold text-text">
               {formatCount(Number(item.value ?? 0))}
             </span>
           </div>
@@ -163,6 +220,13 @@ function DashboardTooltip({
     </div>
   );
 }
+
+const AXIS_PROPS = {
+  stroke: CHART.axis,
+  fontSize: 12,
+  tickLine: false,
+  axisLine: false,
+} as const;
 
 type BrushRange = {
   startIndex: number;
@@ -181,15 +245,47 @@ function getDefaultBrushRange(
   range: RangeKey,
   length: number,
 ): BrushRange | null {
-  if (length === 0) {
-    return null;
-  }
-
+  if (length === 0) return null;
   const windowSize = getDefaultWindow(range, length);
-  return {
-    startIndex: Math.max(0, length - windowSize),
-    endIndex: length - 1,
-  };
+  return { startIndex: Math.max(0, length - windowSize), endIndex: length - 1 };
+}
+
+/** 피드백 본문. 길면 펼치기 버튼으로 연다(마우스를 올려야 보이는 방식 대신). */
+function FeedbackDetails({ id, text }: { id: string; text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > LONG_TEXT || text.split("\n").length > 2;
+  const bodyId = `feedback-body-${id}`;
+  return (
+    <div>
+      <p
+        id={bodyId}
+        className={cn(
+          "whitespace-pre-line text-sm text-muted",
+          !open && long && "line-clamp-2",
+        )}
+      >
+        {text}
+      </p>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-controls={bodyId}
+          className="mt-1 inline-flex h-8 items-center gap-1 rounded-md text-xs font-semibold text-text hover:underline"
+        >
+          {open ? "접기" : "펼치기"}
+          <ChevronDown
+            className={cn(
+              "size-3.5 transition-transform",
+              open && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function AdminDashboard({
@@ -205,6 +301,9 @@ export default function AdminDashboard({
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmItem, setConfirmItem] = useState<FeedbackSubmission | null>(
+    null,
+  );
   const [range, setRange] = useState<RangeKey>("30d");
   const [brushRange, setBrushRange] = useState<BrushRange | null>(() =>
     getDefaultBrushRange(
@@ -214,9 +313,7 @@ export default function AdminDashboard({
   );
 
   useEffect(() => {
-    if (activeTab !== "feedback") {
-      return;
-    }
+    if (activeTab !== "feedback") return;
 
     let cancelled = false;
 
@@ -229,7 +326,6 @@ export default function AdminDashboard({
           method: "GET",
           cache: "no-store",
         });
-
         const data = (await response.json()) as {
           success: boolean;
           error?: string;
@@ -239,31 +335,21 @@ export default function AdminDashboard({
         if (!response.ok || !data.success) {
           throw new Error(data.error || "피드백 목록을 불러오지 못했습니다.");
         }
-
-        if (cancelled) {
-          return;
-        }
-
+        if (cancelled) return;
         setFeedbackItems(data.feedback ?? []);
       } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
+        if (cancelled) return;
         setFeedbackError(
           error instanceof Error
             ? error.message
             : "피드백 목록을 불러오지 못했습니다.",
         );
       } finally {
-        if (!cancelled) {
-          setFeedbackLoading(false);
-        }
+        if (!cancelled) setFeedbackLoading(false);
       }
     }
 
     void loadFeedback();
-
     return () => {
       cancelled = true;
     };
@@ -283,38 +369,29 @@ export default function AdminDashboard({
   }, [dashboard.trends, range]);
 
   const chartData = useMemo(() => {
-    if (!brushRange) {
-      return baseData;
-    }
-
+    if (!brushRange) return baseData;
     return baseData.slice(brushRange.startIndex, brushRange.endIndex + 1);
   }, [baseData, brushRange]);
 
-  const rangeLabel = useMemo(() => {
-    if (chartData.length === 0) {
-      return "선택된 기간 없음";
-    }
-
-    return `${chartData[0].rawDate} ~ ${chartData[chartData.length - 1].rawDate}`;
-  }, [chartData]);
+  const rangeLabel =
+    chartData.length === 0
+      ? "선택된 기간 없음"
+      : `${chartData[0].rawDate} ~ ${chartData[chartData.length - 1].rawDate}`;
 
   const failedLogs = useMemo(() => {
-    if (chartData.length === 0) {
-      return [];
-    }
-
+    if (chartData.length === 0) return [];
     const startDate = chartData[0].rawDate;
     const endDate = chartData[chartData.length - 1].rawDate;
-
     return dashboard.recentLogs.filter((log) => {
-      if (log.type !== "image_job_error" && log.type !== "pdf_job_error") {
+      if (log.type !== "image_job_error" && log.type !== "pdf_job_error")
         return false;
-      }
-
       const logDate = log.timestamp.slice(0, 10);
       return logDate >= startDate && logDate <= endDate;
     });
   }, [chartData, dashboard.recentLogs]);
+
+  const spark = (key: keyof (typeof dashboard.trends)[number]) =>
+    dashboard.trends.slice(-SPARK_DAYS).map((item) => Number(item[key]) || 0);
 
   const handleBrushChange = (nextRange: BrushRange | null | undefined) => {
     if (
@@ -324,17 +401,15 @@ export default function AdminDashboard({
     ) {
       return;
     }
-
     setBrushRange(nextRange);
   };
 
-  const handleRangeChange = (nextRange: string) => {
-    const r = nextRange as RangeKey;
-    setRange(r);
+  const handleRangeChange = (nextRange: RangeKey) => {
+    setRange(nextRange);
     setBrushRange(
       getDefaultBrushRange(
-        r,
-        Math.min(dashboard.trends.length, getTakeCount(r)),
+        nextRange,
+        Math.min(dashboard.trends.length, getTakeCount(nextRange)),
       ),
     );
   };
@@ -346,9 +421,7 @@ export default function AdminDashboard({
     try {
       const response = await fetch("/api/feedback", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
 
@@ -362,280 +435,465 @@ export default function AdminDashboard({
       }
 
       setFeedbackItems((items) => items.filter((item) => item.id !== id));
+      setConfirmItem(null);
     } catch (error) {
       setFeedbackError(
         error instanceof Error ? error.message : "피드백 삭제에 실패했습니다.",
       );
+      setConfirmItem(null);
     } finally {
       setDeletingId(null);
     }
   };
 
+  const totals = dashboard.totals;
+
   return (
-    <div className="w-full px-4 py-8 md:px-8 md:py-10 animate-fade-in">
-      <div className="mx-auto max-w-6xl space-y-16">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 pb-12 border-b border-white/5">
-          <div className="space-y-4">
-            <h1 className="text-title font-bold tracking-[-0.02em]">대시보드</h1>
-            <p className="text-sm text-slate-500 font-medium">실시간 시스템 메트릭 및 사용자 피드백 분석</p>
+    <div className="mx-auto w-full max-w-[1440px] animate-fade-in px-4 py-6 md:px-8 md:py-8">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as AdminTab)}
+      >
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-title font-bold tracking-[-0.02em]">
+              대시보드
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              {activeTab === "analytics"
+                ? `사용량과 실패 원인 · ${rangeLabel}`
+                : `사용자 피드백 ${feedbackItems.length}건`}
+            </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AdminTab)} className="bg-white/[0.03] border border-white/[0.08] p-1 rounded-full h-11">
-              <TabsList className="bg-transparent h-full">
-                <TabsTrigger value="analytics" className="rounded-full px-5 text-[10px] font-black tracking-widest uppercase data-[state=active]:bg-white data-[state=active]:text-black transition-all">
-                  Analytics
-                </TabsTrigger>
-                <TabsTrigger value="feedback" className="rounded-full px-5 text-[10px] font-black tracking-widest uppercase data-[state=active]:bg-white data-[state=active]:text-black transition-all">
-                  Feedback
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            {activeTab === "analytics" && (
-              <Tabs value={range} onValueChange={handleRangeChange} className="bg-white/[0.03] border border-white/[0.08] p-1 rounded-full h-11">
-                <TabsList className="bg-transparent h-full">
-                  {(["7d", "30d", "365d"] as const).map((key) => (
-                    <TabsTrigger key={key} value={key} className="rounded-full px-4 text-[10px] font-black tracking-widest uppercase data-[state=active]:bg-white data-[state=active]:text-black transition-all">
-                      {key}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            )}
-          </div>
+          <TabsList>
+            <TabsTrigger value="analytics">통계</TabsTrigger>
+            <TabsTrigger value="feedback">피드백</TabsTrigger>
+          </TabsList>
         </div>
 
-        {!dashboard.enabled && (
-          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 flex items-center gap-4">
-            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-            <p className="text-sm font-bold text-amber-200/80">Redis/KV 환경변수가 설정되지 않아 실시간 데이터를 불러올 수 없습니다.</p>
+        <TabsContent value="analytics" className="mt-0 space-y-6">
+          {!dashboard.enabled && (
+            <InlineAlert
+              tone="warning"
+              title="통계 DB가 연결되지 않아 데이터를 불러올 수 없습니다"
+            >
+              서버의 DATABASE_URL 설정을 확인하세요. 아래 숫자는 모두 0으로
+              보입니다.
+            </InlineAlert>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span id="range-label" className="text-sm text-muted">
+              기간
+            </span>
+            <SegmentedControl
+              aria-labelledby="range-label"
+              value={range}
+              onValueChange={handleRangeChange}
+              options={RANGE_OPTIONS}
+              className="w-60"
+            />
+            <span className="text-xs text-muted">
+              첫 차트 아래 막대를 끌면 세부 구간을 고를 수 있습니다.
+            </span>
           </div>
-        )}
 
-        <Tabs value={activeTab} className="w-full">
-          <TabsContent value="analytics" className="space-y-12 mt-0">
-            {/* Range Info */}
-            <div className="flex items-center gap-4 text-slate-500 border-l-2 border-blue-600 pl-4 py-1">
-              <Calendar className="w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Observation Period</span>
-                <span className="text-sm font-black text-white">{rangeLabel}</span>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatTile
+              label="페이지 뷰"
+              value={formatCount(totals.pageViews)}
+              spark={spark("pageViews")}
+            />
+            <StatTile
+              label="방문자"
+              value={formatCount(totals.uniqueVisitors)}
+              note="전체 기간 고유 방문자"
+            />
+            <StatTile
+              label="받은 파일"
+              value={formatCount(totals.filesSent)}
+              spark={spark("filesSent")}
+            />
+            <StatTile
+              label="절감한 용량"
+              value={formatSize(totals.totalBytesSaved)}
+              note="이미지 압축 성공 기준"
+            />
+            <StatTile
+              label="성공한 작업"
+              value={formatCount(totals.conversionsSucceeded)}
+              spark={spark("conversionsSucceeded")}
+            />
+            <StatTile
+              label="실패한 작업"
+              value={formatCount(totals.conversionsFailed)}
+              spark={spark("conversionsFailed")}
+            />
+            <StatTile
+              label="이미지 처리"
+              value={formatCount(totals.imageSuccess)}
+              spark={spark("imageSuccess")}
+            />
+            <StatTile
+              label="PDF 처리"
+              value={formatCount(totals.pdfSuccess)}
+              spark={spark("pdfSuccess")}
+            />
+          </div>
+          <p className="text-xs text-muted">
+            숫자는 전체 기간 합계, 아래 막대는 최근 {SPARK_DAYS}일이며 노란
+            막대가 오늘입니다.
+          </p>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <ChartSection
+              title="작업 결과"
+              description="날마다 성공·실패한 작업 수"
+              empty={baseData.length === 0}
+              legend={
+                <>
+                  <LegendItem
+                    color={CHART.success}
+                    label="성공"
+                    icon={
+                      <CheckCircle2
+                        className="size-3.5 text-success"
+                        aria-hidden="true"
+                      />
+                    }
+                  />
+                  <LegendItem
+                    color={CHART.danger}
+                    label="실패"
+                    icon={
+                      <XCircle
+                        className="size-3.5 text-danger"
+                        aria-hidden="true"
+                      />
+                    }
+                  />
+                </>
+              }
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={baseData}
+                  margin={{ top: 4, right: 4, left: -16, bottom: 0 }}
+                  barGap={2}
+                >
+                  <CartesianGrid stroke={CHART.grid} vertical={false} />
+                  <XAxis dataKey="date" {...AXIS_PROPS} dy={6} />
+                  <YAxis {...AXIS_PROPS} allowDecimals={false} />
+                  <Tooltip
+                    content={<DashboardTooltip />}
+                    cursor={{ fill: "rgba(244,244,245,0.04)" }}
+                  />
+                  <Bar
+                    dataKey="conversions"
+                    name="성공"
+                    fill={CHART.success}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={14}
+                  />
+                  <Bar
+                    dataKey="failures"
+                    name="실패"
+                    fill={CHART.danger}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={14}
+                  />
+                  <Brush
+                    dataKey="date"
+                    height={22}
+                    stroke={CHART.axis}
+                    fill={CHART.bg}
+                    travellerWidth={10}
+                    startIndex={brushRange?.startIndex}
+                    endIndex={brushRange?.endIndex}
+                    onChange={handleBrushChange}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartSection>
+
+            <ChartSection
+              title="페이지 뷰"
+              description="선택한 구간의 날마다 방문 수"
+              empty={chartData.length === 0}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+                >
+                  <CartesianGrid stroke={CHART.grid} vertical={false} />
+                  <XAxis dataKey="date" {...AXIS_PROPS} dy={6} />
+                  <YAxis {...AXIS_PROPS} allowDecimals={false} />
+                  <Tooltip
+                    content={<DashboardTooltip />}
+                    cursor={{ stroke: CHART.grid }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="pageViews"
+                    name="페이지 뷰"
+                    stroke={CHART.accent}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{
+                      r: 4,
+                      fill: CHART.accent,
+                      stroke: CHART.surface,
+                      strokeWidth: 2,
+                    }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartSection>
+
+            <ChartSection
+              title="도구별 성공"
+              description="선택한 구간의 이미지·PDF 처리 성공 수"
+              empty={chartData.length === 0}
+              legend={
+                <>
+                  <LegendItem color={CHART.accent} label="이미지" />
+                  <LegendItem color={CHART.neutral} label="PDF" />
+                </>
+              }
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 4, right: 4, left: -16, bottom: 0 }}
+                >
+                  <CartesianGrid stroke={CHART.grid} vertical={false} />
+                  <XAxis dataKey="date" {...AXIS_PROPS} dy={6} />
+                  <YAxis {...AXIS_PROPS} allowDecimals={false} />
+                  <Tooltip
+                    content={<DashboardTooltip />}
+                    cursor={{ fill: "rgba(244,244,245,0.04)" }}
+                  />
+                  <Bar
+                    dataKey="imageSuccess"
+                    name="이미지"
+                    fill={CHART.accent}
+                    stackId="tool"
+                    maxBarSize={18}
+                    stroke={CHART.surface}
+                    strokeWidth={2}
+                  />
+                  <Bar
+                    dataKey="pdfSuccess"
+                    name="PDF"
+                    fill={CHART.neutral}
+                    stackId="tool"
+                    maxBarSize={18}
+                    radius={[4, 4, 0, 0]}
+                    stroke={CHART.surface}
+                    strokeWidth={2}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartSection>
+
+            <section className="rounded-tile border border-line bg-surface p-5">
+              <h2 className="text-base font-bold">날짜별 숫자</h2>
+              <p className="mb-3 text-xs text-muted">
+                선택한 구간을 표로 봅니다.
+              </p>
+              <div className="max-h-[260px] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-surface text-left text-xs text-muted">
+                    <tr>
+                      <th className="py-2 pr-3 font-semibold">날짜</th>
+                      <th className="py-2 pr-3 text-right font-semibold">
+                        페이지 뷰
+                      </th>
+                      <th className="py-2 pr-3 text-right font-semibold">
+                        성공
+                      </th>
+                      <th className="py-2 pr-3 text-right font-semibold">
+                        실패
+                      </th>
+                      <th className="py-2 pr-3 text-right font-semibold">
+                        이미지
+                      </th>
+                      <th className="py-2 text-right font-semibold">PDF</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {chartData.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-muted">
+                          이 기간에 데이터가 없습니다
+                        </td>
+                      </tr>
+                    )}
+                    {[...chartData].reverse().map((row) => (
+                      <tr key={row.rawDate}>
+                        <td className="py-2 pr-3">{row.rawDate}</td>
+                        <td className="py-2 pr-3 text-right">
+                          {formatCount(row.pageViews)}
+                        </td>
+                        <td className="py-2 pr-3 text-right">
+                          {formatCount(row.conversions)}
+                        </td>
+                        <td className="py-2 pr-3 text-right">
+                          {formatCount(row.failures)}
+                        </td>
+                        <td className="py-2 pr-3 text-right">
+                          {formatCount(row.imageSuccess)}
+                        </td>
+                        <td className="py-2 text-right">
+                          {formatCount(row.pdfSuccess)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            </section>
+          </div>
 
-            {/* Totals Grid */}
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-              <StatCard label="Total Page Views" value={dashboard.totals.pageViews} icon={MousePointer2} />
-              <StatCard label="Unique Visitors" value={dashboard.totals.uniqueVisitors} icon={Users} />
-              <StatCard label="Assets Received" value={dashboard.totals.filesSent} icon={Files} />
-              <StatCard label="Optimization Saved" value={formatSize(dashboard.totals.totalBytesSaved)} icon={Save} />
-              <StatCard label="Job Succeeded" value={dashboard.totals.conversionsSucceeded} icon={CheckCircle2} />
-              <StatCard label="Job Failed" value={dashboard.totals.conversionsFailed} icon={AlertCircle} />
-              <StatCard label="Image Processed" value={dashboard.totals.imageSuccess} icon={ImageIcon} />
-              <StatCard label="PDF Processed" value={dashboard.totals.pdfSuccess} icon={FileText} />
-            </div>
-
-            {/* Charts Section */}
-            <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard title="System Performance" subtitle="작업 처리 성공 추이" icon={Activity} empty={baseData.length === 0}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={baseData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.03)" vertical={false} />
-                    <XAxis dataKey="date" stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip content={<DashboardTooltip />} cursor={{ stroke: "rgba(255,255,255,0.1)" }} />
-                    <Line type="monotone" dataKey="conversions" name="성공" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 4, fill: "#fff", stroke: "#3b82f6", strokeWidth: 2 }} />
-                    <Brush dataKey="date" height={20} stroke="#1e293b" travellerWidth={10} startIndex={brushRange?.startIndex} endIndex={brushRange?.endIndex} onChange={handleBrushChange} fill="#09090b" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
-              <ChartCard title="Success Rate" subtitle="성공 및 실패 비교" icon={BarChart3} empty={chartData.length === 0}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barGap={6}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.03)" vertical={false} />
-                    <XAxis dataKey="date" stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip content={<DashboardTooltip />} cursor={{ fill: "rgba(255,255,255,0.02)" }} />
-                    <Bar dataKey="conversions" name="성공" fill="#fff" radius={[4, 4, 0, 0]} barSize={12} />
-                    <Bar dataKey="failures" name="실패" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={12} opacity={0.6} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-
-            {/* Second Row Charts */}
-            <div className="grid gap-6 lg:grid-cols-2">
-              <ChartCard title="Traffic Volume" subtitle="일별 페이지 뷰 현황" icon={Activity} empty={chartData.length === 0}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.03)" vertical={false} />
-                    <XAxis dataKey="date" stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip content={<DashboardTooltip />} />
-                    <Line type="stepAfter" dataKey="pageViews" name="PV" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#fff" }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
-              <ChartCard title="Tool Distribution" subtitle="도구별 처리 현황" icon={ImageIcon} empty={chartData.length === 0}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.03)" vertical={false} />
-                    <XAxis dataKey="date" stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#334155" fontSize={9} fontWeight="bold" tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip content={<DashboardTooltip />} />
-                    <Bar dataKey="imageSuccess" name="Image" fill="#3b82f6" stackId="a" barSize={20} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="pdfSuccess" name="PDF" fill="#f43f5e" stackId="a" barSize={20} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-
-            {/* Error Logs Table */}
-            <Card className="overflow-hidden">
-               <CardHeader className="p-8 border-b border-white/5 bg-white/[0.01]">
-                 <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg font-black tracking-tight text-white uppercase">System Errors</CardTitle>
-                      <CardDescription className="text-[11px] text-slate-500 font-medium mt-0.5">실패한 작업에 대한 상세 로그 분석</CardDescription>
-                    </div>
-                    <div className="px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-[10px] font-black text-red-500 uppercase tracking-widest">
-                      Attention Required
-                    </div>
-                 </div>
-               </CardHeader>
-               <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[11px]">
-                      <thead className="bg-white/[0.02]">
-                        <tr className="border-b border-white/5">
-                          <th className="px-8 py-4 text-left font-black text-slate-500 uppercase tracking-widest">Timestamp</th>
-                          <th className="px-4 py-4 text-left font-black text-slate-500 uppercase tracking-widest">Engine</th>
-                          <th className="px-4 py-4 text-left font-black text-slate-500 uppercase tracking-widest">Target</th>
-                          <th className="px-4 py-4 text-left font-black text-slate-500 uppercase tracking-widest">Error Detail</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {failedLogs.length === 0 && (
-                          <tr>
-                            <td colSpan={4} className="px-8 py-12 text-center text-slate-700 font-bold uppercase tracking-widest">
-                              No engine errors reported in this range
-                            </td>
-                          </tr>
-                        )}
-                        {failedLogs.map((log, index) => (
-                          <tr key={`${log.timestamp}-${index}`} className="hover:bg-white/[0.01] transition-colors group">
-                            <td className="px-8 py-4 whitespace-nowrap text-slate-400 font-medium">
-                              <div className="flex items-center gap-2">
-                                <Clock className="w-3 h-3 opacity-40" />
-                                {formatTimestamp(log.timestamp)}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-white/5 border border-white/5 text-white font-black uppercase text-[9px]">
-                                {log.tool?.toUpperCase() ?? "CORE"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 font-bold text-slate-300 max-w-[200px] truncate">
-                              {log.filename ?? "Unknown Source"}
-                            </td>
-                            <td className="px-4 py-4 text-red-400 font-medium italic opacity-80 group-hover:opacity-100 transition-opacity">
-                              {log.error ?? "Unhandled exception"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-               </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="feedback" className="mt-0 space-y-8">
-             {feedbackError && (
-              <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-5 flex items-center gap-4">
-                <AlertCircle className="w-4 h-4 text-red-500" />
-                <p className="text-xs font-bold text-red-200/80">{feedbackError}</p>
+          <section className="rounded-tile border border-line bg-surface p-5">
+            <h2 className="flex items-baseline gap-1.5 text-base font-bold">
+              최근 실패
+              <span className="font-medium text-muted">
+                ({failedLogs.length})
+              </span>
+            </h2>
+            <p className="mb-3 text-xs text-muted">
+              최근 기록 {dashboard.recentLogs.length}건 가운데 선택한 구간에
+              실패한 작업과 오류 내용입니다.
+            </p>
+            {failedLogs.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted">
+                이 기간에 실패한 작업이 없습니다
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[40rem] text-sm">
+                  <thead className="text-left text-xs text-muted">
+                    <tr className="border-b border-line">
+                      <th className="py-2 pr-4 font-semibold">시각</th>
+                      <th className="py-2 pr-4 font-semibold">도구</th>
+                      <th className="py-2 pr-4 font-semibold">파일</th>
+                      <th className="py-2 font-semibold">오류</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {failedLogs.map((log, index) => (
+                      <tr
+                        key={`${log.timestamp}-${index}`}
+                        className="align-top"
+                      >
+                        <td className="whitespace-nowrap py-3 pr-4 text-muted">
+                          {formatTimestamp(log.timestamp)}
+                        </td>
+                        <td className="py-3 pr-4">
+                          {log.tool === "pdf"
+                            ? "PDF"
+                            : log.tool === "url_capture"
+                              ? "캡처"
+                              : "이미지"}
+                        </td>
+                        <td className="max-w-[16rem] break-all py-3 pr-4">
+                          {log.filename ?? "이름 없음"}
+                        </td>
+                        <td className="py-3 text-danger">
+                          {log.error ?? "원인 기록 없음"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
+          </section>
+        </TabsContent>
 
-            <Card className="overflow-hidden">
-               <CardHeader className="p-8 border-b border-white/5 bg-white/[0.01]">
-                 <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg font-black tracking-tight text-white uppercase">User Submissions</CardTitle>
-                      <CardDescription className="text-[11px] text-slate-500 font-medium mt-0.5">사용자 제보 및 개선 요청 목록</CardDescription>
-                    </div>
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] bg-white/5 px-4 py-2 rounded-full border border-white/5">
-                      {feedbackLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : `${feedbackItems.length} Entries`}
-                    </div>
-                 </div>
-               </CardHeader>
-               <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[12px]">
-                      <thead className="bg-white/[0.02]">
-                        <tr className="border-b border-white/5 text-slate-500 font-black uppercase tracking-widest text-[10px]">
-                          <th className="px-8 py-5 text-left">Time</th>
-                          <th className="px-4 py-5 text-left">Type</th>
-                          <th className="px-4 py-5 text-left">Subject</th>
-                          <th className="px-4 py-5 text-left">Content</th>
-                          <th className="px-8 py-5 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {!feedbackLoading && feedbackItems.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="px-8 py-20 text-center text-slate-700 font-bold uppercase tracking-widest text-xs">
-                              Queue is currently empty
-                            </td>
-                          </tr>
-                        )}
-                        {feedbackItems.map((entry) => (
-                          <tr key={entry.id} className="hover:bg-white/[0.01] transition-colors group">
-                            <td className="px-8 py-6 whitespace-nowrap text-slate-400 font-medium">
-                              {formatTimestamp(entry.createdAt)}
-                            </td>
-                            <td className="px-4 py-6">
-                              <span className={cn(
-                                "inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
-                                entry.type === "bug" ? "bg-red-500/10 text-red-500 border border-red-500/20" : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
-                              )}>
-                                {entry.type}
-                              </span>
-                            </td>
-                            <td className="px-4 py-6 font-black text-white">
-                              {entry.title}
-                            </td>
-                            <td className="px-4 py-6 max-w-md">
-                              <p className="text-slate-400 font-medium leading-relaxed line-clamp-2 group-hover:line-clamp-none transition-all cursor-default">
-                                {entry.details}
-                              </p>
-                            </td>
-                            <td className="px-8 py-6 text-right">
-                              <Button 
-                                variant="ghost" 
-                                iconOnly
-                                onClick={() => void handleDeleteFeedback(entry.id)}
-                                disabled={deletingId === entry.id}
-                                className="w-10 h-10 rounded-full text-slate-600 hover:text-red-500 hover:bg-red-500/10"
-                              >
-                                {deletingId === entry.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+        <TabsContent value="feedback" className="mt-0 space-y-4">
+          {feedbackError && <InlineAlert tone="danger" title={feedbackError} />}
+
+          {feedbackLoading && feedbackItems.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted">
+              피드백을 불러오는 중
+            </p>
+          ) : feedbackItems.length === 0 ? (
+            <EmptyState
+              title="아직 받은 피드백이 없습니다"
+              description="사용자가 피드백 화면에서 제출하면 여기에 쌓입니다."
+            />
+          ) : (
+            <ul className="divide-y divide-line rounded-tile border border-line bg-surface">
+              {feedbackItems.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="grid gap-3 p-5 md:grid-cols-[9rem_1fr_auto] md:gap-6"
+                >
+                  <div className="space-y-1.5">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md bg-surface-2 px-2 py-0.5 text-xs font-semibold",
+                        entry.type === "bug" ? "text-danger" : "text-text",
+                      )}
+                    >
+                      {entry.type === "bug" ? "버그" : "개선 요청"}
+                    </span>
+                    <p className="text-xs text-muted">
+                      {formatTimestamp(entry.createdAt)}
+                    </p>
                   </div>
-               </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+                  <div className="min-w-0 space-y-1">
+                    <h3 className="break-words text-base font-semibold">
+                      {entry.title}
+                    </h3>
+                    <FeedbackDetails id={entry.id} text={entry.details} />
+                  </div>
+                  <div className="md:self-start">
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => setConfirmItem(entry)}
+                      loading={deletingId === entry.id}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      삭제
+                      <span className="sr-only"> {entry.title}</span>
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {confirmItem && (
+        <Dialog
+          open
+          onClose={() => setConfirmItem(null)}
+          title="피드백을 삭제할까요?"
+          description="삭제하면 되돌릴 수 없습니다."
+          footer={
+            <>
+              <Button onClick={() => setConfirmItem(null)}>취소</Button>
+              <Button
+                variant="danger"
+                onClick={() => void handleDeleteFeedback(confirmItem.id)}
+                loading={deletingId === confirmItem.id}
+              >
+                삭제
+              </Button>
+            </>
+          }
+        >
+          <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm font-semibold">
+            {confirmItem.title}
+          </p>
+        </Dialog>
+      )}
     </div>
   );
 }
