@@ -1,5 +1,5 @@
 /**
- * 이미지 파일 또는 블롭을 서버리스 API로 전송하여 remove.bg급 고품질 투명 PNG 블롭을 반환합니다.
+ * 이미지 파일 또는 블롭을 /api/remove-bg로 보내 배경을 지운 투명 PNG 블롭을 반환합니다.
  * @param image 원본 이미지 파일 또는 블롭
  * @param onProgress 진행 상태 백분율 및 현재 단계 콜백
  * @returns 배경이 제거된 투명 PNG 이미지 Blob
@@ -13,11 +13,11 @@ export async function removeImageBackground(
   }
 
   // 자체 서버에는 요청 크기 제한이 없으므로 원본 해상도 그대로 전송합니다.
-  onProgress?.(40, "AI GPU 서버로 전송 중...");
+  onProgress?.(40, "서버로 보내는 중");
   const formData = new FormData();
   formData.append("file", image, image instanceof File ? image.name : "image.png");
 
-  onProgress?.(65, "remove.bg급 고정밀 배경 분리 중...");
+  onProgress?.(65, "배경 분리 중");
 
   const response = await fetch("/api/remove-bg", {
     method: "POST",
@@ -35,7 +35,7 @@ export async function removeImageBackground(
     throw new Error(errorMsg);
   }
 
-  onProgress?.(95, "투명 PNG 이미지 수신 중...");
+  onProgress?.(95, "결과 받는 중");
   const resultBlob = await response.blob();
 
   onProgress?.(100, "완료");
@@ -45,7 +45,7 @@ export async function removeImageBackground(
 /**
  * 투명 PNG Blob을 사용자가 지정한 최종 포맷(PNG, WEBP, JPEG 등)으로 브라우저에서 고속 변환합니다.
  * - PNG: 원본 투명 무손실 그대로 유지
- * - WEBP: 투명 알파 채널 100% 보존 + 70% 고압축 용량 절감
+ * - WEBP: 투명 알파 채널을 보존하면서 손실 압축(품질 0.9)
  * - JPEG: 투명 미지원 규격이므로 투명 영역을 깔끔한 흰색(White) 배경으로 채움
  */
 export async function convertBlobFormat(
