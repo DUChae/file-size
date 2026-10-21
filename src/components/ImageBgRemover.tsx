@@ -29,7 +29,7 @@ import { ToolLayout } from "@/components/ui/tool-layout";
 import { formatSize } from "@/lib/format";
 import { readImageInfo } from "@/lib/thumbnail";
 
-const MAX_FILES = 10;
+const MAX_FILES = 20;
 const CONCURRENCY = 1; // 서버 추론이 무거워 한 번에 하나씩 보낸다.
 const ACCEPT = ".png,.jpg,.jpeg,.webp";
 const ACCEPTED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -353,7 +353,7 @@ export default function ImageBgRemover() {
 
   const summary =
     queue.length === 0
-      ? "PNG·JPEG·WebP · 최대 10개 · 넣으면 바로 처리합니다"
+      ? `PNG·JPEG·WebP · 최대 ${MAX_FILES}개 · 넣으면 바로 처리합니다`
       : [
           `${queue.length}개 파일`,
           doneItems.length > 0 && `${doneItems.length}개 완료`,
@@ -397,7 +397,7 @@ export default function ImageBgRemover() {
           accept={ACCEPT}
           onFiles={handleFiles}
           title="파일 추가"
-          hint="끌어 놓기·클릭·Ctrl+V · 최대 10개"
+          hint={`끌어 놓기·클릭·Ctrl+V · 최대 ${MAX_FILES}개`}
         />
       }
       onDropFiles={handleFiles}
@@ -481,7 +481,7 @@ export default function ImageBgRemover() {
                 accept={ACCEPT}
                 onFiles={handleFiles}
                 title="파일을 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
-                hint="눌러서 파일 선택 · PNG·JPEG·WebP · 최대 10개 · 넣으면 바로 배경을 지웁니다"
+                hint={`눌러서 파일 선택 · PNG·JPEG·WebP · 최대 ${MAX_FILES}개 · 넣으면 바로 배경을 지웁니다`}
                 className="h-full min-h-0 py-6"
               />
             }

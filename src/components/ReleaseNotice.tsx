@@ -1,13 +1,13 @@
 "use client";
 
-// V2 출시와 파일 크기 제한 해제를 첫 방문 시 한 번 알리는 공지 모달
+// 한 번에 올릴 수 있는 이미지 수를 20개로 늘린 업데이트를 첫 방문 시 한 번 알리는 공지 모달
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 
 // 공지 내용이 바뀌면 키를 올려 기존 방문자에게도 다시 보여준다.
-const NOTICE_KEY = "file-optimizer-notice-v2";
+const NOTICE_KEY = "file-optimizer-notice-v3";
 
 function hasSeenNotice() {
   try {
@@ -40,8 +40,8 @@ export default function ReleaseNotice() {
     <Dialog
       open={open}
       onClose={close}
-      title="파일 크기 제한이 없어졌어요"
-      description="V2 업데이트"
+      title="이미지를 한 번에 20개까지 올릴 수 있어요"
+      description="업데이트"
       closeLabel="공지 닫기"
       footer={
         <Button
@@ -55,8 +55,9 @@ export default function ReleaseNotice() {
       }
     >
       <p className="text-base text-muted">
-        새 서버로 옮기면서 이미지 업로드 용량 제한을 없앴습니다. 고해상도 원본도
-        줄이지 말고 그대로 올려 압축하세요.
+        이미지 압축·변환과 배경 제거에서 한 번에 넣을 수 있는 파일 수를 10개에서
+        20개로 늘렸습니다. 용량 제한은 여전히 없으니 고해상도 원본도 그대로
+        올리세요.
       </p>
     </Dialog>
   );

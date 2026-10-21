@@ -24,7 +24,7 @@ import {
   useReleaseBlobUrls,
 } from "@/components/toolHooks";
 
-const MAX_FILES = 10;
+const MAX_FILES = 20;
 const CONCURRENCY = 2;
 const DEFAULT_QUALITY = 80;
 const DEFAULT_SCALE = 50;
@@ -363,7 +363,7 @@ export default function ImageOptimizer({
   );
   const summary =
     queue.length === 0
-      ? "PNG·JPEG·WebP·AVIF·GIF · 최대 10개 · 용량 제한 없음"
+      ? `PNG·JPEG·WebP·AVIF·GIF · 최대 ${MAX_FILES}개 · 용량 제한 없음`
       : [
           `${queue.length}개 파일`,
           formatSize(totalOriginal),
@@ -578,7 +578,7 @@ export default function ImageOptimizer({
           accept={ACCEPT}
           onFiles={handleFiles}
           title="파일 추가"
-          hint="끌어 놓기·클릭·Ctrl+V · 최대 10개 · 용량 제한 없음"
+          hint={`끌어 놓기·클릭·Ctrl+V · 최대 ${MAX_FILES}개 · 용량 제한 없음`}
         />
       }
       onDropFiles={handleFiles}
@@ -670,7 +670,7 @@ export default function ImageOptimizer({
                 accept={ACCEPT}
                 onFiles={handleFiles}
                 title="파일을 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
-                hint="눌러서 파일 선택 · PNG·JPEG·WebP·AVIF·GIF · 최대 10개 · 용량 제한 없음"
+                hint={`눌러서 파일 선택 · PNG·JPEG·WebP·AVIF·GIF · 최대 ${MAX_FILES}개 · 용량 제한 없음`}
                 className="h-full min-h-0 py-6"
               />
             }
