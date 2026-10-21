@@ -80,8 +80,7 @@ export default function ReleaseNotice() {
 
         <Button
           type="button"
-          variant="blue"
-          size="xl"
+          variant="primary"
           onClick={close}
           autoFocus
           className="w-full"

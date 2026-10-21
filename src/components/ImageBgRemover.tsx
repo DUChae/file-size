@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatSize } from "@/lib/format";
 
 const MAX_FILES = 10;
 const CONCURRENCY = 1; // 배경 제거는 CPU 연산이 매우 무거우므로 동시성 제한을 1로 설정하여 메인 스레드 병목을 예방합니다.
@@ -28,14 +29,6 @@ export default function ImageBgRemover() {
   const [isDragging, setIsDragging] = useState(false);
   const [exportFormat, setExportFormat] = useState<"png" | "webp" | "jpeg">("png");
   const processingRef = useRef<number>(0);
-
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  };
 
   const handleFiles = useCallback(
     (files: FileList | File[]) => {
@@ -188,11 +181,11 @@ export default function ImageBgRemover() {
               Configuration
             </h4>
             <div className="space-y-4">
-              <h3 className="text-3xl font-black tracking-ultra-tight text-white flex items-center gap-4">
+              <h3 className="text-3xl font-black tracking-[-0.035em] text-white flex items-center gap-4">
                 <span className="text-teal-300">BG REMOVER</span> Engine
               </h3>
               <p className="text-base text-slate-400 font-medium leading-relaxed">
-                remove.bg를 능가하는 최신 SOTA 모델(BiRefNet) 기반으로 머리카락, 사물 윤곽선을 칼같이 분리합니다.
+                BiRefNet 모델로 인물·사물의 배경을 지우고 투명 PNG로 저장합니다.
               </p>
             </div>
           </div>

@@ -16,18 +16,11 @@ import {
   loadPdfjs,
   releaseCanvas,
 } from "@/lib/pdfjs";
+import { formatSize } from "@/lib/format";
 
 const MAX_PDF_SIZE = 20 * 1024 * 1024;
 const DPI_OPTIONS = [72, 144, 216, 300] as const;
 type Dpi = (typeof DPI_OPTIONS)[number];
-
-function formatSize(bytes: number) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 function sanitizeFilename(name: string) {
   const normalized = name.normalize("NFC");
@@ -199,7 +192,7 @@ export default function PdfToPngConverter() {
               <FileText className="w-4 h-4" />
               Document Processing
             </h4>
-            <h2 className="text-4xl font-black text-white tracking-ultra-tight uppercase">PDF to PNG</h2>
+            <h2 className="text-4xl font-black text-white tracking-[-0.035em] uppercase">PDF to PNG</h2>
           </div>
           <p className="text-base text-slate-400 font-medium leading-relaxed">
             고해상도 렌더링 엔진을 통해 PDF 문서를 정밀하게 분석하고 고품질 PNG 이미지로 변환합니다. 여러 페이지는 단일 ZIP 패키지로, 한 페이지는 PNG 파일로 즉시 다운로드됩니다.
@@ -214,7 +207,7 @@ export default function PdfToPngConverter() {
               className="hidden"
               onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
             />
-            <Button variant="outline" size="lg" asChild className="rounded-full border-white/10 hover:bg-white/5 text-white h-14 px-10">
+            <Button variant="secondary" asChild className="rounded-full border-white/10 hover:bg-white/5 text-white h-14 px-10">
               <div className="cursor-pointer font-black text-xs tracking-widest">
                 <FileSearch className="w-5 h-5 mr-3" />
                 SELECT PDF
@@ -222,8 +215,7 @@ export default function PdfToPngConverter() {
             </Button>
           </label>
           <Button 
-            variant="blue" 
-            size="lg" 
+            variant="primary" 
             onClick={handleConvert}
             disabled={!file || status === "converting"}
             className="rounded-2xl h-14 px-8 text-xs font-black tracking-widest active:scale-[0.98]"

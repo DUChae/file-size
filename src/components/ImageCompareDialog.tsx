@@ -7,17 +7,10 @@ import { Download, X } from "lucide-react";
 import { QueueItem } from "@/types/image";
 import { downloadSingle } from "@/utils/download";
 import { Button } from "@/components/ui/button";
+import { formatSize } from "@/lib/format";
 
 const CHECKERBOARD =
   "repeating-conic-gradient(#1f2024 0% 25%, #141518 0% 50%) 50% / 20px 20px";
-
-function formatSize(bytes: number) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
 
 interface Dimensions {
   width: number;
@@ -199,8 +192,7 @@ export default function ImageCompareDialog({
           </dl>
           <Button
             type="button"
-            variant="blue"
-            size="lg"
+            variant="primary"
             onClick={() => downloadSingle(item)}
             className="rounded-2xl"
           >
