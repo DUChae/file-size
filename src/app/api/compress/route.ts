@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { CompressionOptions, CompressionResponse } from "@/types/image";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { CaptureNotFoundError, isCaptureId, readCapture } from "@/lib/captureStorage";
+import { stripMetadataLossless } from "@/lib/imageMetadata";
 
 class RequestError extends Error {
   constructor(
@@ -99,10 +100,12 @@ function parseRangedInteger(
 }
 
 // Encodes with a single user-chosen quality (1-100). 100 means lossless where the format supports it.
+// `fast` trades compression efficiency for speed; the target-size search uses it for its probes.
 function encodeWithQuality(
   instance: sharp.Sharp,
   outputMime: string,
   quality: number,
+  fast = false,
 ) {
   const lossless = quality >= 100;
 
@@ -110,12 +113,16 @@ function encodeWithQuality(
     // libvips only emits 16- or 256-color palettes, so dithering is what actually trades
     // size for smoothness: 30-99 ramps dither 0 -> 1 at 256 colors, below 30 drops to 16 colors.
     return lossless
-      ? instance.png({ compressionLevel: 9, effort: 10, palette: false })
+      ? instance.png({
+          compressionLevel: fast ? 6 : 9,
+          effort: fast ? 1 : 10,
+          palette: false,
+        })
       : instance.png({
           colours: quality < 30 ? 16 : 256,
           dither: quality < 30 ? 0 : (quality - 30) / 70,
-          compressionLevel: 9,
-          effort: 8,
+          compressionLevel: fast ? 6 : 9,
+          effort: fast ? 1 : 8,
           palette: true,
         });
   }
@@ -123,7 +130,7 @@ function encodeWithQuality(
   if (outputMime === "image/webp") {
     return instance.webp({
       quality,
-      effort: 6,
+      effort: fast ? 1 : 6,
       smartSubsample: true,
       lossless,
     });
@@ -132,7 +139,7 @@ function encodeWithQuality(
   if (outputMime === "image/avif") {
     return instance.avif({
       quality,
-      effort: 5,
+      effort: fast ? 0 : 5,
       chromaSubsampling: quality >= 90 ? "4:4:4" : "4:2:0",
       lossless,
     });
@@ -140,13 +147,90 @@ function encodeWithQuality(
 
   if (outputMime === "image/gif") {
     return instance.gif({
-      effort: lossless ? 9 : 7,
+      effort: fast ? 1 : lossless ? 9 : 7,
       // GIF color count scales with quality (2-256 colors).
       colours: Math.min(256, Math.max(2, Math.round((256 * quality) / 100))),
     });
   }
 
   return instance.jpeg({ quality, progressive: true, mozjpeg: true });
+}
+
+// Lossless metadata removal from the original bytes; null when the container is not
+// supported (AVIF, GIF) or the stripped file does not parse back as the same image.
+async function stripOriginalMetadata(input: Buffer, metadata: sharp.Metadata) {
+  const stripped = stripMetadataLossless(
+    input,
+    `image/${metadata.format}`,
+    metadata.orientation,
+  );
+  if (!stripped) return null;
+
+  try {
+    const check = await sharp(stripped).metadata();
+    const intact =
+      check.width === metadata.width &&
+      check.height === metadata.height &&
+      !check.xmp &&
+      !check.iptc;
+    return intact ? stripped : null;
+  } catch {
+    return null;
+  }
+}
+
+// AVIF/WebP encodes of large images take tens of seconds, and Cloudflare cuts requests at
+// 100s, so the search stops probing once this budget is spent and keeps what it has.
+const TARGET_SEARCH_BUDGET_MS = 30_000;
+
+// Binary-searches the highest quality whose output fits targetBytes using fast probes, then
+// re-encodes that quality at full effort. When even quality 1 is too large, the smallest
+// attempt is returned so the user still gets the best effort.
+async function encodeToTargetSize(
+  instance: sharp.Sharp,
+  outputMime: string,
+  targetBytes: number,
+) {
+  const startedAt = Date.now();
+  let low = 1;
+  let high = 100;
+  let best: { buffer: Buffer; quality: number } | null = null;
+  let smallest: { buffer: Buffer; quality: number } | null = null;
+
+  while (
+    low <= high &&
+    (!smallest || Date.now() - startedAt < TARGET_SEARCH_BUDGET_MS)
+  ) {
+    const quality = Math.floor((low + high) / 2);
+    const buffer = await encodeWithQuality(
+      instance.clone(),
+      outputMime,
+      quality,
+      true,
+    ).toBuffer();
+
+    if (!smallest || buffer.length < smallest.buffer.length) {
+      smallest = { buffer, quality };
+    }
+    if (buffer.length <= targetBytes) {
+      best = { buffer, quality };
+      low = quality + 1;
+    } else {
+      high = quality - 1;
+    }
+  }
+
+  const chosen = best ?? smallest!;
+  const full = await encodeWithQuality(
+    instance.clone(),
+    outputMime,
+    chosen.quality,
+  ).toBuffer();
+
+  // Full effort is almost always smaller; keep the probe if it is not, so a fit stays a fit.
+  return full.length <= chosen.buffer.length
+    ? { buffer: full, quality: chosen.quality }
+    : chosen;
 }
 
 export async function POST(req: NextRequest) {
@@ -176,8 +260,16 @@ export async function POST(req: NextRequest) {
       10,
       100,
     );
-    const isCustomQuality = quality !== undefined;
-    const analyticsMode = isCustomQuality ? "custom" : category;
+    const targetBytes = parseRangedInteger(
+      options.targetBytes,
+      "Target size",
+      1024,
+      Number.MAX_SAFE_INTEGER,
+    );
+    const stripMetadata = options.stripMetadata !== false;
+    const isCustomQuality = quality !== undefined || targetBytes !== undefined;
+    const analyticsMode =
+      targetBytes !== undefined ? "target" : isCustomQuality ? "custom" : category;
 
     await trackAnalyticsEvent({
       type: "image_job_started",
@@ -316,8 +408,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // sharp drops EXIF/XMP/IPTC unless asked to keep them; rotate() already reset orientation.
+    if (!stripMetadata) {
+      sharpInstance = sharpInstance.keepMetadata();
+    }
+
     let outputBuffer: Buffer;
-    if (isCustomQuality) {
+    let qualityUsed: number | undefined;
+    if (targetBytes !== undefined) {
+      const fitted = await encodeToTargetSize(
+        sharpInstance,
+        outputMime,
+        targetBytes,
+      );
+      outputBuffer = fitted.buffer;
+      qualityUsed = fitted.quality;
+    } else if (quality !== undefined) {
       outputBuffer = await encodeWithQuality(
         sharpInstance,
         outputMime,
@@ -407,10 +513,30 @@ export async function POST(req: NextRequest) {
     }
     const outputFilename = `${safeBaseName}.${outputExt}`;
 
-    const finalBuffer =
-      outputMime === mimeType && outputBuffer.length >= originalSize
-        ? inputBuffer
-        : outputBuffer;
+    // When re-encoding does not beat the original, hand back the original bytes. If the user
+    // asked to strip metadata, cut the EXIF/XMP/IPTC segments out of those bytes instead of
+    // falling back to the larger re-encode, so the result never grows and pixels are untouched.
+    const sourceHasPrivateMetadata = Boolean(
+      metadata.exif || metadata.xmp || metadata.iptc,
+    );
+    const returnOriginal =
+      outputMime === mimeType && outputBuffer.length >= originalSize;
+    let finalBuffer = outputBuffer;
+    if (returnOriginal) {
+      finalBuffer =
+        stripMetadata && sourceHasPrivateMetadata
+          ? ((await stripOriginalMetadata(inputBuffer, metadata)) ?? outputBuffer)
+          : inputBuffer;
+    }
+    const keptOriginalPixels = finalBuffer !== outputBuffer;
+
+    const targetHeaders: Record<string, string> = {};
+    if (targetBytes !== undefined) {
+      targetHeaders["X-Target-Met"] = finalBuffer.length <= targetBytes ? "1" : "0";
+      if (!keptOriginalPixels && qualityUsed !== undefined) {
+        targetHeaders["X-Quality-Used"] = String(qualityUsed);
+      }
+    }
 
     await trackAnalyticsEvent({
       type: "image_job_success",
@@ -429,6 +555,7 @@ export async function POST(req: NextRequest) {
         "X-Original-Size": String(originalSize),
         "X-Optimized-Size": String(finalBuffer.length),
         "X-Output-Filename": encodeURIComponent(outputFilename),
+        ...targetHeaders,
         // The page reads this with fetch(); if the URL is ever opened directly (e.g. a
         // cross-site form post), the browser downloads it instead of rendering it on our origin.
         "Content-Disposition": "attachment",

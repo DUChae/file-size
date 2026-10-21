@@ -4,6 +4,8 @@ export interface CompressImageOptions {
   targetFormat: OutputFormat;
   quality: number;
   scalePercent?: number;
+  targetBytes?: number;
+  stripMetadata?: boolean;
 }
 
 export interface CompressedImage {
@@ -13,6 +15,9 @@ export interface CompressedImage {
   optimizedDownloadUrl: string;
   originalSize: number;
   optimizedSize: number;
+  // Only set for target-size requests.
+  qualityUsed?: number;
+  targetMet?: boolean;
 }
 
 // Posts the source to /api/compress, which answers with the compressed image itself.
@@ -50,6 +55,8 @@ export async function requestCompression(
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
   const encodedFilename = response.headers.get("X-Output-Filename");
+  const targetMet = response.headers.get("X-Target-Met");
+  const qualityUsed = response.headers.get("X-Quality-Used");
 
   return {
     optimizedFilename: encodedFilename
@@ -59,12 +66,14 @@ export async function requestCompression(
     optimizedDownloadUrl: objectUrl,
     originalSize: Number(response.headers.get("X-Original-Size")),
     optimizedSize: Number(response.headers.get("X-Optimized-Size")) || blob.size,
+    qualityUsed: qualityUsed ? Number(qualityUsed) : undefined,
+    targetMet: targetMet === null ? undefined : targetMet === "1",
   };
 }
 
 export async function compressImage(
   file: File,
-  { targetFormat, quality, scalePercent }: CompressImageOptions,
+  { targetFormat, quality, scalePercent, targetBytes, stripMetadata }: CompressImageOptions,
 ): Promise<CompressedImage> {
   return requestCompression(
     { file },
@@ -74,6 +83,8 @@ export async function compressImage(
       targetFormat,
       quality,
       scalePercent: scalePercent && scalePercent < 100 ? scalePercent : undefined,
+      targetBytes,
+      stripMetadata,
     },
   );
 }

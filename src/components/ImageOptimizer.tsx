@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import { QueueItem, QueueStatus, OutputFormat } from "@/types/image";
 import { compressImage } from "@/utils/compression";
 import { downloadSingle, downloadAllAsZip } from "@/utils/download";
+import ImageCompareDialog from "@/components/ImageCompareDialog";
 import {
   Upload,
   Download,
@@ -11,6 +12,7 @@ import {
   Image as ImageIcon,
   Play,
   RotateCcw,
+  Columns2,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -20,6 +22,42 @@ const CONCURRENCY = 2;
 const DEFAULT_QUALITY = 80;
 const DEFAULT_SCALE = 50;
 const QUALITY_PRESETS = [60, 75, 90, 100];
+const TARGET_PRESETS_KB = [100, 200, 500, 1024];
+
+type SizeMode = "quality" | "target";
+type TargetUnit = "KB" | "MB";
+
+function parseTargetBytes(value: string, unit: TargetUnit) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const bytes = Math.round(amount * (unit === "MB" ? 1024 * 1024 : 1024));
+  return bytes >= 1024 ? bytes : null;
+}
+
+const PASTE_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+};
+
+// Clipboard images all arrive as "image.png"; give each a distinct, dated name.
+function renamePastedFiles(files: File[]) {
+  const stamp = new Date()
+    .toISOString()
+    .slice(0, 19)
+    .replace(/[-:]/g, "")
+    .replace("T", "-");
+  return files.map((file, index) => {
+    const ext = PASTE_EXTENSIONS[file.type] ?? "png";
+    const suffix = files.length > 1 ? `-${index + 1}` : "";
+    return new File([file], `pasted-${stamp}${suffix}.${ext}`, {
+      type: file.type,
+      lastModified: Date.now(),
+    });
+  });
+}
 
 interface CompressionJob {
   item: QueueItem;
@@ -87,6 +125,14 @@ export default function ImageOptimizer({
   const [resizeEnabled, setResizeEnabled] = useState(false);
   const [globalScale, setGlobalScale] = useState(DEFAULT_SCALE);
   const [isRunning, setIsRunning] = useState(false);
+  const [sizeMode, setSizeMode] = useState<SizeMode>("quality");
+  const [targetValue, setTargetValue] = useState("500");
+  const [targetUnit, setTargetUnit] = useState<TargetUnit>("KB");
+  const [stripMetadata, setStripMetadata] = useState(true);
+  const [compareId, setCompareId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const targetBytes = parseTargetBytes(targetValue, targetUnit);
+  const targetInvalid = sizeMode === "target" && targetBytes === null;
 
   // Results are blob: URLs; release the ones that leave the queue (re-compression,
   // removal, CLEAR) and whatever is left when the component unmounts.
@@ -149,6 +195,24 @@ export default function ImageOptimizer({
     [queue.length, activeFormat, updateItem],
   );
 
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      // Leave pastes into text fields alone, and ignore them while a modal is open.
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      if (document.querySelector("dialog[open]")) return;
+
+      const images = Array.from(event.clipboardData?.files ?? []).filter(
+        (file) => file.type.startsWith("image/"),
+      );
+      if (images.length === 0) return;
+      event.preventDefault();
+      handleFiles(renamePastedFiles(images));
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [handleFiles]);
+
   const runJob = useCallback(
     async ({ item, scalePercent }: CompressionJob) => {
       updateItem(item.id, { status: "compressing" });
@@ -157,6 +221,8 @@ export default function ImageOptimizer({
           targetFormat: item.targetFormat,
           quality: item.quality ?? DEFAULT_QUALITY,
           scalePercent,
+          targetBytes: item.targetBytes,
+          stripMetadata: item.stripMetadata,
         });
         updateItem(item.id, {
           status: "done",
@@ -164,6 +230,8 @@ export default function ImageOptimizer({
           optimizedUrl: res.optimizedUrl,
           optimizedDownloadUrl: res.optimizedDownloadUrl,
           optimizedSize: res.optimizedSize,
+          qualityUsed: res.qualityUsed,
+          targetMet: res.targetMet,
           reductionRate:
             ((res.originalSize - res.optimizedSize) / res.originalSize) * 100,
         });
@@ -179,7 +247,7 @@ export default function ImageOptimizer({
 
   // Settings are snapshotted when the user presses start, not when files are dropped.
   const startCompression = async (includeFinished: boolean) => {
-    if (isRunning) return;
+    if (isRunning || targetInvalid) return;
 
     const jobs: CompressionJob[] = [];
     const nextQueue = queue.map((item) => {
@@ -193,6 +261,11 @@ export default function ImageOptimizer({
         status: "queued",
         targetFormat: activeFormat,
         quality,
+        targetBytes:
+          sizeMode === "target" ? (targetBytes ?? undefined) : undefined,
+        stripMetadata,
+        qualityUsed: undefined,
+        targetMet: undefined,
         error: undefined,
         optimizedFilename: undefined,
         optimizedUrl: undefined,
@@ -232,6 +305,9 @@ export default function ImageOptimizer({
     (i) => i.status === "done" || i.status === "error",
   );
   const hasDone = queue.some((i) => i.status === "done");
+  const compareItem = queue.find(
+    (i) => i.id === compareId && i.status === "done",
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-16">
@@ -260,47 +336,155 @@ export default function ImageOptimizer({
             </p>
           </div>
 
-          {/* Quality */}
+          {/* Quality / target size */}
           <div className="space-y-4 pt-6 border-t border-white/10">
-            <div className="flex items-end justify-between">
-              <h4 className="text-xs font-semibold text-slate-500">Quality</h4>
-              <span className="text-2xl font-black text-teal-300 tabular-nums leading-none">
-                {quality}%
-              </span>
-            </div>
-            <Slider
-              min={1}
-              max={100}
-              step={1}
-              value={[quality]}
-              onValueChange={([value]) => setQuality(value)}
-              disabled={isRunning}
-              aria-label="Quality"
-            />
-            <div className="flex justify-between text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-              <span>작은 용량</span>
-              <span>높은 화질</span>
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {QUALITY_PRESETS.map((preset) => (
+            <div
+              role="radiogroup"
+              aria-label="압축 방식"
+              className="grid grid-cols-2 gap-1 p-1 bg-black/20 border border-white/10 rounded-xl"
+            >
+              {(
+                [
+                  ["quality", "품질 지정"],
+                  ["target", "목표 용량"],
+                ] as const
+              ).map(([mode, label]) => (
                 <button
-                  key={preset}
-                  onClick={() => setQuality(preset)}
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={sizeMode === mode}
+                  onClick={() => setSizeMode(mode)}
                   disabled={isRunning}
                   className={cn(
-                    "py-2 rounded-xl text-[11px] font-black border transition-all active:scale-[0.98] disabled:opacity-40",
-                    quality === preset
-                      ? "bg-white text-black border-white"
-                      : "border-white/10 text-slate-500 hover:text-white hover:border-white/20",
+                    "py-2 rounded-lg text-xs font-black transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-40",
+                    sizeMode === mode
+                      ? "bg-white text-black"
+                      : "text-slate-500 hover:text-white",
                   )}
                 >
-                  {preset}
+                  {label}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-500 font-medium leading-relaxed">
-              {getQualityHint(activeFormat)}
-            </p>
+
+            {sizeMode === "target" ? (
+              <div className="space-y-4">
+                <label
+                  htmlFor="targetSize"
+                  className="block text-xs font-semibold text-slate-500"
+                >
+                  Target Size
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="targetSize"
+                    type="number"
+                    inputMode="decimal"
+                    min={1}
+                    step="any"
+                    value={targetValue}
+                    onChange={(event) => setTargetValue(event.target.value)}
+                    disabled={isRunning}
+                    aria-invalid={targetInvalid}
+                    aria-describedby="targetSizeHint"
+                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-base font-black text-teal-300 tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-40"
+                  />
+                  <select
+                    value={targetUnit}
+                    onChange={(event) =>
+                      setTargetUnit(event.target.value as TargetUnit)
+                    }
+                    disabled={isRunning}
+                    aria-label="용량 단위"
+                    className="rounded-xl border border-white/10 bg-black/20 px-3 text-base font-bold text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-40"
+                  >
+                    <option value="KB">KB</option>
+                    <option value="MB">MB</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {TARGET_PRESETS_KB.map((preset) => {
+                    const isMb = preset >= 1024;
+                    const value = String(isMb ? preset / 1024 : preset);
+                    const unit: TargetUnit = isMb ? "MB" : "KB";
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          setTargetValue(value);
+                          setTargetUnit(unit);
+                        }}
+                        disabled={isRunning}
+                        className={cn(
+                          "py-2 rounded-xl text-[11px] font-black border transition-all active:scale-[0.98] disabled:opacity-40",
+                          targetValue === value && targetUnit === unit
+                            ? "bg-white text-black border-white"
+                            : "border-white/10 text-slate-500 hover:text-white hover:border-white/20",
+                        )}
+                      >
+                        {value}
+                        {unit}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p
+                  id="targetSizeHint"
+                  className={cn(
+                    "text-xs font-medium leading-relaxed",
+                    targetInvalid ? "text-red-400" : "text-slate-500",
+                  )}
+                >
+                  {targetInvalid
+                    ? "1KB 이상의 용량을 입력하세요."
+                    : "이 용량 안에 들어가는 가장 높은 품질을 자동으로 찾습니다. 품질을 최저로 낮춰도 넘으면 가장 작은 결과를 드리며, 크기 조절을 함께 쓰면 더 작게 만들 수 있습니다."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-end justify-between">
+                  <h4 className="text-xs font-semibold text-slate-500">Quality</h4>
+                  <span className="text-2xl font-black text-teal-300 tabular-nums leading-none">
+                    {quality}%
+                  </span>
+                </div>
+                <Slider
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={[quality]}
+                  onValueChange={([value]) => setQuality(value)}
+                  disabled={isRunning}
+                  aria-label="Quality"
+                />
+                <div className="flex justify-between text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                  <span>작은 용량</span>
+                  <span>높은 화질</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {QUALITY_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setQuality(preset)}
+                      disabled={isRunning}
+                      className={cn(
+                        "py-2 rounded-xl text-[11px] font-black border transition-all active:scale-[0.98] disabled:opacity-40",
+                        quality === preset
+                          ? "bg-white text-black border-white"
+                          : "border-white/10 text-slate-500 hover:text-white hover:border-white/20",
+                      )}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  {getQualityHint(activeFormat)}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Resize */}
@@ -347,6 +531,31 @@ export default function ImageOptimizer({
                 꺼져 있으면 원본 해상도를 그대로 유지합니다.
               </p>
             )}
+          </div>
+
+          {/* Metadata */}
+          <div className="space-y-3 pt-6 border-t border-white/10">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={stripMetadata}
+                onChange={(event) => setStripMetadata(event.target.checked)}
+                disabled={isRunning}
+                aria-describedby="stripMetadataHint"
+                className="h-4 w-4 accent-teal-300"
+              />
+              <span className="text-sm font-bold text-white">
+                메타데이터 제거 (EXIF·GPS 위치)
+              </span>
+            </label>
+            <p
+              id="stripMetadataHint"
+              className="text-xs text-slate-500 font-medium leading-relaxed"
+            >
+              {stripMetadata
+                ? "촬영 기기, 촬영 시각, GPS 위치 정보를 지운 뒤 저장합니다. 사진 방향은 그대로 유지됩니다."
+                : "원본의 EXIF·XMP·IPTC 정보를 결과에 남깁니다. 위치 정보가 포함될 수 있으니 공유 전에 확인하세요."}
+            </p>
           </div>
         </div>
 
@@ -410,17 +619,29 @@ export default function ImageOptimizer({
           setIsDragging(false);
           handleFiles(e.dataTransfer.files);
         }}
-        onClick={() => document.getElementById("fileInput")?.click()}
+        onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label="이미지 파일 선택"
+        aria-describedby="dropzoneHint"
         className={cn(
-          "group relative flex flex-col items-center justify-center py-24 rounded-3xl transition-all cursor-pointer border border-dashed backdrop-blur-xl",
+          "group relative flex flex-col items-center justify-center py-24 rounded-3xl transition-all cursor-pointer border border-dashed backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300",
           isDragging
             ? "bg-teal-300/10 border-teal-300/70 scale-[0.99]"
             : "bg-white/[0.025] border-white/10 hover:bg-white/[0.045] hover:border-white/20",
         )}
       >
         <input
-          id="fileInput"
+          ref={fileInputRef}
           type="file"
+          tabIndex={-1}
           multiple
           accept=".png,.jpg,.jpeg,.webp,.avif,.gif"
           className="hidden"
@@ -437,8 +658,12 @@ export default function ImageOptimizer({
             <h3 className="text-2xl font-bold text-white tracking-tight">
               작업을 시작하려면 파일을 드롭하세요
             </h3>
-            <p className="text-xs text-slate-500 font-semibold">
-              최대 {MAX_FILES}개 · 파일을 추가한 뒤 압축 시작을 누르세요
+            <p
+              id="dropzoneHint"
+              className="text-xs text-slate-500 font-semibold"
+            >
+              최대 {MAX_FILES}개 · 클릭·Enter로 선택하거나 Ctrl+V(⌘V)로
+              붙여넣으세요
             </p>
           </div>
         </div>
@@ -460,7 +685,7 @@ export default function ImageOptimizer({
               {queuedCount > 0 && (
                 <button
                   onClick={() => void startCompression(false)}
-                  disabled={isRunning}
+                  disabled={isRunning || targetInvalid}
                   className="flex items-center gap-3 text-xs font-black bg-teal-300 text-black px-6 py-3.5 rounded-2xl hover:bg-teal-200 transition-all active:scale-[0.98] disabled:opacity-40"
                 >
                   {isRunning ? (
@@ -474,7 +699,8 @@ export default function ImageOptimizer({
               {!isRunning && hasFinished && (
                 <button
                   onClick={() => void startCompression(true)}
-                  className="flex items-center gap-3 text-xs font-black bg-white/5 hover:bg-white/10 text-white px-6 py-3.5 rounded-2xl transition-all active:scale-[0.98] border border-white/10"
+                  disabled={targetInvalid}
+                  className="flex items-center gap-3 text-xs font-black bg-white/5 hover:bg-white/10 text-white px-6 py-3.5 rounded-2xl transition-all active:scale-[0.98] border border-white/10 disabled:opacity-40"
                 >
                   <RotateCcw className="w-4 h-4" />
                   현재 설정으로 다시 압축
@@ -518,8 +744,17 @@ export default function ImageOptimizer({
                     className="p-6 flex items-center gap-6 group hover:bg-white/[0.035] transition-colors"
                   >
                     <div className="flex-1 min-w-0 flex items-center gap-8">
-                      <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 shadow-inner group-hover:border-white/20 transition-colors">
-                        <ImageIcon className="w-5 h-5 text-slate-500" />
+                      <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden shadow-inner group-hover:border-white/20 transition-colors">
+                        {item.status === "done" && item.optimizedUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.optimizedUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <ImageIcon className="w-5 h-5 text-slate-500" />
+                        )}
                       </div>
                       <div className="flex flex-col gap-2 min-w-0 flex-1">
                         <span className="text-sm font-bold text-white truncate leading-none">
@@ -541,6 +776,23 @@ export default function ImageOptimizer({
                             </span>
                           )}
                         </div>
+                        {item.status === "done" &&
+                          item.targetBytes !== undefined && (
+                            <span
+                              className={cn(
+                                "text-[11px] font-semibold",
+                                item.targetMet
+                                  ? "text-teal-300"
+                                  : "text-amber-300",
+                              )}
+                            >
+                              {item.targetMet
+                                ? `목표 ${formatSize(item.targetBytes)} 달성`
+                                : `목표 ${formatSize(item.targetBytes)}에 못 미침 · 크기 조절을 함께 써 보세요`}
+                              {item.qualityUsed !== undefined &&
+                                ` · 품질 ${item.qualityUsed}%`}
+                            </span>
+                          )}
                         {item.status === "error" && item.error && (
                           <span className="text-[11px] font-semibold text-red-400 truncate">
                             {item.error}
@@ -609,7 +861,17 @@ export default function ImageOptimizer({
                       {item.status === "done" ? (
                         <>
                           <button
+                            onClick={() => setCompareId(item.id)}
+                            aria-label={`${item.originalFile.name} 원본과 비교`}
+                            title="원본과 비교"
+                            className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black transition-all shadow-lg group-hover:scale-110 active:scale-90"
+                          >
+                            <Columns2 className="w-5 h-5" />
+                          </button>
+                          <button
                             onClick={() => downloadSingle(item)}
+                            aria-label={`${item.optimizedFilename ?? item.originalFile.name} 저장`}
+                            title="저장"
                             className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black transition-all shadow-lg group-hover:scale-110 active:scale-90"
                           >
                             <Download className="w-5 h-5" />
@@ -635,6 +897,14 @@ export default function ImageOptimizer({
             </div>
           </div>
         </div>
+      )}
+
+      {compareItem && (
+        <ImageCompareDialog
+          key={compareItem.id}
+          item={compareItem}
+          onClose={() => setCompareId(null)}
+        />
       )}
     </div>
   );

@@ -25,6 +25,12 @@ export interface QueueItem {
   quality?: number;
   // Per-file resize override (percent). Undefined follows the global scale.
   customScale?: number;
+  // Snapshotted at start: when set, the server searches for a quality that fits this size.
+  targetBytes?: number;
+  stripMetadata?: boolean;
+  // Reported back by the server for target-size jobs.
+  qualityUsed?: number;
+  targetMet?: boolean;
   width?: number;
   height?: number;
   optimizedFilename?: string;
@@ -46,6 +52,10 @@ export interface CompressionOptions {
   quality?: number;
   // 10-100. Resizes by percent of the (EXIF-rotated) source width, keeping aspect ratio.
   scalePercent?: number;
+  // Bytes. When present, `quality` is ignored and the highest quality that fits is used.
+  targetBytes?: number;
+  // Defaults to true. false keeps EXIF/XMP/IPTC (orientation is still normalized).
+  stripMetadata?: boolean;
   webWidth?: number;
   webHeight?: number;
   webX?: number;
