@@ -8,8 +8,10 @@ interface ToolLayoutProps {
   title: string;
   /** 제목 아래 한 줄 요약. 예: "5개 파일 · 12.7 MB · 2개 완료" */
   summary?: React.ReactNode;
-  /** 본문 머리 오른쪽 버튼들. 주 버튼은 하나만 둔다. */
+  /** 본문 머리 오른쪽 보조 버튼들 */
   actions?: React.ReactNode;
+  /** 노란 주 버튼 하나. 데스크톱은 행동 줄 맨 끝, 모바일은 첫 줄 전체 폭에 둔다. */
+  primary?: React.ReactNode;
   settingsTitle: string;
   settings: React.ReactNode;
   /** 서랍 맨 아래(작은 파일 추가 영역 등) */
@@ -23,6 +25,7 @@ export function ToolLayout({
   title,
   summary,
   actions,
+  primary,
   settingsTitle,
   settings,
   settingsFooter,
@@ -56,8 +59,15 @@ export function ToolLayout({
             <h1 className="text-title font-bold tracking-[-0.02em]">{title}</h1>
             {summary && <p className="mt-1 text-sm text-muted">{summary}</p>}
           </div>
-          {actions && (
-            <div className="flex flex-wrap items-center gap-2">{actions}</div>
+          {(actions || primary) && (
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              {primary && (
+                <div className="order-first w-full sm:order-last sm:w-auto [&>button]:w-full sm:[&>button]:w-auto">
+                  {primary}
+                </div>
+              )}
+              {actions}
+            </div>
           )}
         </div>
         {children}

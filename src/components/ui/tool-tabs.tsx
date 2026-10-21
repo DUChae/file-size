@@ -1,5 +1,7 @@
+"use client";
 // 상단 도구 탭과 포맷 변환 하위 모드 탭. 도구 이동은 링크로 한다.
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { ToolDefinition } from "@/lib/tools";
@@ -24,10 +26,24 @@ export function ToolTabs<T extends string>({
   "aria-label": ariaLabel,
 }: ToolTabsProps<T>) {
   const primary = variant === "primary";
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // 좁은 화면에서 가로로 스크롤되는 탭 줄이 현재 도구를 가리지 않게 한다.
+  useEffect(() => {
+    const list = listRef.current;
+    const current = list?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!list || !current) return;
+    const listBox = list.getBoundingClientRect();
+    const box = current.getBoundingClientRect();
+    if (box.left < listBox.left || box.right > listBox.right) {
+      list.scrollLeft += box.left - listBox.left - 16;
+    }
+  }, [activeId]);
 
   return (
     <nav aria-label={ariaLabel} className={className}>
       <ul
+        ref={listRef}
         className={cn(
           primary
             ? "flex h-full gap-1 overflow-x-auto [scrollbar-width:none]"
@@ -45,7 +61,7 @@ export function ToolTabs<T extends string>({
                 className={cn(
                   "flex items-center justify-center gap-2 whitespace-nowrap text-sm transition-colors duration-150",
                   primary
-                    ? "-mb-px border-b-2 px-3.5"
+                    ? "-mb-px border-b-2 px-2.5 md:px-3.5"
                     : "h-8 w-full rounded-md px-3",
                   primary &&
                     (active

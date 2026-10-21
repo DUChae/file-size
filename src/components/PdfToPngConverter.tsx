@@ -13,7 +13,7 @@ import { Dropzone } from "@/components/ui/dropzone";
 import { FocusTile } from "@/components/ui/focus-tile";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { ToolLayout } from "@/components/ui/tool-layout";
-import { TileBoard, type BoardTile } from "@/components/TileBoard";
+import { EmptyWall, TileBoard, type BoardTile } from "@/components/TileBoard";
 import {
   PdfPagePreview,
   usePdfPreview,
@@ -340,7 +340,7 @@ export default function PdfToPngConverter() {
         />
       }
       onDropFiles={handleFiles}
-      actions={
+      primary={
         <Button
           variant="primary"
           onClick={() => void handleConvert()}
@@ -413,13 +413,18 @@ export default function PdfToPngConverter() {
         )}
 
         {!file ? (
-          <Dropzone
-            accept={ACCEPT}
-            multiple={false}
-            onFiles={handleFiles}
-            title="PDF를 끌어 놓거나 눌러서 선택하세요"
-            hint="한 번에 하나 · 용량 제한 없음 · 파일은 서버로 보내지 않습니다"
-            className="min-h-[min(60dvh,28rem)]"
+          <EmptyWall
+            title="페이지"
+            first={
+              <Dropzone
+                accept={ACCEPT}
+                multiple={false}
+                onFiles={handleFiles}
+                title="PDF를 끌어 놓거나 눌러서 선택하세요"
+                hint="한 번에 하나 · 용량 제한 없음 · 파일은 서버로 보내지 않습니다"
+                className="h-full min-h-0 py-6"
+              />
+            }
           />
         ) : preview.status !== "ready" ? (
           <div className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-tile border border-line text-sm text-muted">

@@ -13,6 +13,7 @@ import { InlineAlert } from "@/components/ui/inline-alert";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Slider } from "@/components/ui/slider";
 import { ToolLayout } from "@/components/ui/tool-layout";
+import { EmptyWall } from "@/components/TileBoard";
 import { MediaTile } from "@/components/ui/media-tile";
 import {
   PdfPagePreview,
@@ -311,6 +312,20 @@ export default function PdfCompressor() {
         />
       }
       onDropFiles={handleFiles}
+      primary={
+        <Button
+          variant="primary"
+          onClick={() => void handleCompress()}
+          disabled={!file || blockedByWarning}
+          loading={isBusy}
+        >
+          {isBusy
+            ? `압축 중 · ${progressLabel}`
+            : status === "done"
+              ? "다시 압축"
+              : "압축 시작"}
+        </Button>
+      }
       actions={
         <>
           {status === "done" && isSmaller && (
@@ -319,18 +334,6 @@ export default function PdfCompressor() {
               저장
             </Button>
           )}
-          <Button
-            variant="primary"
-            onClick={() => void handleCompress()}
-            disabled={!file || blockedByWarning}
-            loading={isBusy}
-          >
-            {isBusy
-              ? `압축 중 · ${progressLabel}`
-              : status === "done"
-                ? "다시 압축"
-                : "압축 시작"}
-          </Button>
         </>
       }
     >
@@ -384,13 +387,18 @@ export default function PdfCompressor() {
         )}
 
         {!file ? (
-          <Dropzone
-            accept={ACCEPT}
-            multiple={false}
-            onFiles={handleFiles}
-            title="PDF를 끌어 놓거나 눌러서 선택하세요"
-            hint="한 번에 하나 · 용량 제한 없음 · 파일은 서버로 보내지 않습니다"
-            className="min-h-[min(60dvh,28rem)]"
+          <EmptyWall
+            title="문서"
+            first={
+              <Dropzone
+                accept={ACCEPT}
+                multiple={false}
+                onFiles={handleFiles}
+                title="PDF를 끌어 놓거나 눌러서 선택하세요"
+                hint="한 번에 하나 · 용량 제한 없음 · 파일은 서버로 보내지 않습니다"
+                className="h-full min-h-0 py-6"
+              />
+            }
           />
         ) : (
           <>
@@ -479,9 +487,26 @@ export default function PdfCompressor() {
                             },
                           ]),
                     ]
-                  : previewError
-                    ? [{ label: "미리보기", value: previewError }]
-                    : undefined
+                  : [
+                      // 대기 중에도 지금 설정으로 무엇을 할지 보여 준다.
+                      {
+                        label: "방식",
+                        value: mode === "standard" ? "표준 압축" : "강력 압축",
+                      },
+                      { label: "품질", value: quality },
+                      mode === "standard"
+                        ? {
+                            label: "최대 이미지 해상도",
+                            value:
+                              maxImageSide === 0
+                                ? "원본 유지"
+                                : `${maxImageSide}px`,
+                          }
+                        : { label: "렌더링 해상도", value: `${rasterDpi} DPI` },
+                      ...(previewError
+                        ? [{ label: "미리보기", value: previewError }]
+                        : []),
+                    ]
               }
               actions={
                 status === "done" && isSmaller ? (

@@ -11,7 +11,7 @@ import {
   convertBlobFormat,
 } from "@/utils/backgroundRemoval";
 import ImageCompareDialog from "@/components/ImageCompareDialog";
-import { TileBoard, type BoardGroup } from "@/components/TileBoard";
+import { EmptyWall, TileBoard, type BoardGroup } from "@/components/TileBoard";
 import { tileStatusOf } from "@/components/ImageResultBoard";
 import { useReportBusy } from "@/components/ToolActivity";
 import {
@@ -347,6 +347,7 @@ export default function ImageBgRemover() {
       checkerboard: true,
       expandable: status === "done",
       removable: status === "queued" || status === "error",
+      sortKey: status === "done" ? item.completedAt : undefined,
     };
   });
 
@@ -400,6 +401,16 @@ export default function ImageBgRemover() {
         />
       }
       onDropFiles={handleFiles}
+      primary={
+        <Button
+          variant="primary"
+          onClick={() => void saveZip()}
+          disabled={doneItems.length === 0}
+          loading={zipState === "busy"}
+        >
+          전체 ZIP 저장
+        </Button>
+      }
       actions={
         <>
           <Button
@@ -420,14 +431,6 @@ export default function ImageBgRemover() {
             disabled={processingCount > 0 || queue.length === 0}
           >
             비우기
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => void saveZip()}
-            disabled={doneItems.length === 0}
-            loading={zipState === "busy"}
-          >
-            전체 ZIP 저장
           </Button>
         </>
       }
@@ -471,12 +474,17 @@ export default function ImageBgRemover() {
         )}
 
         {queue.length === 0 ? (
-          <Dropzone
-            accept={ACCEPT}
-            onFiles={handleFiles}
-            title="파일을 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
-            hint="눌러서 파일 선택 · PNG·JPEG·WebP · 최대 10개 · 넣으면 바로 배경을 지웁니다"
-            className="min-h-[min(60dvh,28rem)]"
+          <EmptyWall
+            title="대기"
+            first={
+              <Dropzone
+                accept={ACCEPT}
+                onFiles={handleFiles}
+                title="파일을 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
+                hint="눌러서 파일 선택 · PNG·JPEG·WebP · 최대 10개 · 넣으면 바로 배경을 지웁니다"
+                className="h-full min-h-0 py-6"
+              />
+            }
           />
         ) : (
           <TileBoard
