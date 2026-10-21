@@ -33,6 +33,11 @@ export interface QueueItem {
   targetMet?: boolean;
   width?: number;
   height?: number;
+  // Small preview made when the file is added (blob: URL owned by the queue).
+  thumbnailUrl?: string;
+  // Epoch ms; drive the elapsed-time label and "latest result" focus.
+  startedAt?: number;
+  completedAt?: number;
   optimizedFilename?: string;
   optimizedUrl?: string;
   optimizedDownloadUrl?: string;
