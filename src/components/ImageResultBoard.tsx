@@ -76,7 +76,7 @@ function scaledSize(item: QueueItem, percent: number) {
 }
 
 /** 원본 파일을 초점 타일에서만 크게 보여 준다. URL은 펼친 동안만 유지한다. */
-function OriginalPreview({ file, name }: { file: File; name: string }) {
+export function OriginalPreview({ file, name }: { file: File; name: string }) {
   const ref = useRef<HTMLImageElement>(null);
   useEffect(() => {
     const img = ref.current;
