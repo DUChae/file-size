@@ -14,10 +14,15 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ToolLayout } from "@/components/ui/tool-layout";
+import { EmptyWall } from "@/components/TileBoard";
 import { formatSize } from "@/lib/format";
 import { readImageInfo } from "@/lib/thumbnail";
 import { useReportBusy } from "@/components/ToolActivity";
-import { useNow, usePasteImages, useReleaseBlobUrls } from "@/components/toolHooks";
+import {
+  useNow,
+  usePasteImages,
+  useReleaseBlobUrls,
+} from "@/components/toolHooks";
 
 const MAX_FILES = 10;
 const CONCURRENCY = 2;
@@ -31,7 +36,13 @@ const TARGET_PRESETS = [
   { value: "1", unit: "MB" },
 ] as const;
 const ACCEPT = ".png,.jpg,.jpeg,.webp,.avif,.gif";
-const ACCEPTED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+const ACCEPTED_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
 const FORMAT_OPTIONS: { value: OutputFormat; label: string }[] = [
   { value: "original", label: "원본" },
   { value: "png", label: "PNG" },
@@ -53,7 +64,11 @@ function parseTargetBytes(value: string, unit: TargetUnit) {
 
 function isAcceptedImage(file: File) {
   const name = file.name.toLowerCase();
-  return ACCEPTED_TYPES.includes(file.type) || name.endsWith(".avif") || name.endsWith(".gif");
+  return (
+    ACCEPTED_TYPES.includes(file.type) ||
+    name.endsWith(".avif") ||
+    name.endsWith(".gif")
+  );
 }
 
 // 서버·네트워크 오류를 "원인 · 할 일" 형식의 한국어로 바꾼다.
@@ -90,7 +105,13 @@ function getQualityHint(format: OutputFormat) {
   }
 }
 
-function SettingLabel({ id, children }: { id?: string; children: React.ReactNode }) {
+function SettingLabel({
+  id,
+  children,
+}: {
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
     <span id={id} className="mb-2 block text-xs font-semibold text-muted">
       {children}
@@ -98,7 +119,11 @@ function SettingLabel({ id, children }: { id?: string; children: React.ReactNode
   );
 }
 
-export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp" | "avif" }) {
+export default function ImageOptimizer({
+  forcedFormat,
+}: {
+  forcedFormat?: "webp" | "avif";
+}) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [globalFormat, setGlobalFormat] = useState<OutputFormat>("original");
   const activeFormat = forcedFormat || globalFormat;
@@ -122,7 +147,9 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
   const verb = forcedFormat ? "변환" : "압축";
 
   // 결과·미리보기 blob URL은 목록에서 빠지거나(삭제·비우기·다시 압축) 화면이 사라질 때 해제한다.
-  useReleaseBlobUrls(queue.flatMap((item) => [item.optimizedUrl, item.thumbnailUrl]));
+  useReleaseBlobUrls(
+    queue.flatMap((item) => [item.optimizedUrl, item.thumbnailUrl]),
+  );
   const queueRef = useRef(queue);
   useEffect(() => {
     queueRef.current = queue;
@@ -143,7 +170,9 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
 
       const problems: string[] = [];
       if (images.length < fileArray.length) {
-        problems.push(`지원하지 않는 형식 ${fileArray.length - images.length}개를 제외했습니다`);
+        problems.push(
+          `지원하지 않는 형식 ${fileArray.length - images.length}개를 제외했습니다`,
+        );
       }
       if (accepted.length < images.length) {
         problems.push(
@@ -208,14 +237,19 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
           optimizedSize: res.optimizedSize,
           qualityUsed: res.qualityUsed,
           targetMet: res.targetMet,
-          reductionRate: ((res.originalSize - res.optimizedSize) / res.originalSize) * 100,
+          reductionRate:
+            ((res.originalSize - res.optimizedSize) / res.originalSize) * 100,
         });
         setAnnouncement(
           `${name} 완료, ${formatSize(res.originalSize)}에서 ${formatSize(res.optimizedSize)}로 ${formatChange(res.originalSize, res.optimizedSize)}`,
         );
       } catch (e) {
         const error = e instanceof Error ? e.message : "Error";
-        updateItem(item.id, { status: "error", error, completedAt: Date.now() });
+        updateItem(item.id, {
+          status: "error",
+          error,
+          completedAt: Date.now(),
+        });
         setAnnouncement(`${name} 실패, ${describeError({ ...item, error })}`);
       }
     },
@@ -223,7 +257,9 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
   );
 
   // Settings are snapshotted when the user presses start, not when files are dropped.
-  const startCompression = async (mode: "queued" | "all" | { only: string }) => {
+  const startCompression = async (
+    mode: "queued" | "all" | { only: string },
+  ) => {
     if (isRunning || targetInvalid) return;
 
     const jobs: CompressionJob[] = [];
@@ -240,7 +276,8 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
         status: "queued",
         targetFormat: activeFormat,
         quality,
-        targetBytes: sizeMode === "target" ? (targetBytes ?? undefined) : undefined,
+        targetBytes:
+          sizeMode === "target" ? (targetBytes ?? undefined) : undefined,
         stripMetadata,
         qualityUsed: undefined,
         targetMet: undefined,
@@ -275,12 +312,15 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
         await runJob(job);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker));
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker),
+    );
 
     setIsRunning(false);
   };
 
-  const removeItem = (id: string) => setQueue((q) => q.filter((item) => item.id !== id));
+  const removeItem = (id: string) =>
+    setQueue((q) => q.filter((item) => item.id !== id));
 
   const saveZip = async () => {
     setZipState("busy");
@@ -294,21 +334,31 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
 
   const queuedCount = queue.filter((i) => i.status === "queued").length;
   const doneItems = queue.filter((i) => i.status === "done");
-  const hasFinished = queue.some((i) => i.status === "done" || i.status === "error");
-  const compareItem = queue.find((i) => i.id === compareId && i.status === "done");
+  const hasFinished = queue.some(
+    (i) => i.status === "done" || i.status === "error",
+  );
+  const compareItem = queue.find(
+    (i) => i.id === compareId && i.status === "done",
+  );
 
   const manualItem = queue.find(
-    (item) => item.id === manualFocusId && (item.status === "done" || item.status === "queued"),
+    (item) =>
+      item.id === manualFocusId &&
+      (item.status === "done" || item.status === "queued"),
   );
   const latestDone = doneItems.reduce<QueueItem | undefined>(
-    (latest, item) => (!latest || (item.completedAt ?? 0) > (latest.completedAt ?? 0) ? item : latest),
+    (latest, item) =>
+      !latest || (item.completedAt ?? 0) > (latest.completedAt ?? 0)
+        ? item
+        : latest,
     undefined,
   );
   const expandedId = manualItem?.id ?? latestDone?.id ?? null;
 
   const totalOriginal = queue.reduce((sum, item) => sum + item.originalSize, 0);
   const saved = doneItems.reduce(
-    (sum, item) => sum + (item.originalSize - (item.optimizedSize ?? item.originalSize)),
+    (sum, item) =>
+      sum + (item.originalSize - (item.optimizedSize ?? item.originalSize)),
     0,
   );
   const summary =
@@ -332,7 +382,8 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
         ? `다시 ${verb}`
         : `${verb} 시작`;
 
-  const onPrimary = () => void startCompression(queuedCount > 0 ? "queued" : "all");
+  const onPrimary = () =>
+    void startCompression(queuedCount > 0 ? "queued" : "all");
 
   const settings = (
     <>
@@ -375,9 +426,14 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
             disabled={isRunning}
             value={QUALITY_PRESETS.includes(quality) ? String(quality) : null}
             onValueChange={(value) => setQuality(Number(value))}
-            options={QUALITY_PRESETS.map((preset) => ({ value: String(preset), label: preset }))}
+            options={QUALITY_PRESETS.map((preset) => ({
+              value: String(preset),
+              label: preset,
+            }))}
           />
-          <p className="mt-2 text-xs text-muted">{getQualityHint(activeFormat)}</p>
+          <p className="mt-2 text-xs text-muted">
+            {getQualityHint(activeFormat)}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -393,7 +449,9 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
             unit={
               <select
                 value={targetUnit}
-                onChange={(event) => setTargetUnit(event.target.value as TargetUnit)}
+                onChange={(event) =>
+                  setTargetUnit(event.target.value as TargetUnit)
+                }
                 disabled={isRunning}
                 aria-label="용량 단위"
                 className="h-8 rounded-md bg-transparent px-1 text-sm text-text outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent"
@@ -409,13 +467,16 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
             disabled={isRunning}
             value={
               TARGET_PRESETS.find(
-                (preset) => preset.value === targetValue && preset.unit === targetUnit,
+                (preset) =>
+                  preset.value === targetValue && preset.unit === targetUnit,
               )
                 ? `${targetValue}${targetUnit}`
                 : null
             }
             onValueChange={(value) => {
-              const preset = TARGET_PRESETS.find((p) => `${p.value}${p.unit}` === value);
+              const preset = TARGET_PRESETS.find(
+                (p) => `${p.value}${p.unit}` === value,
+              );
               if (!preset) return;
               setTargetValue(preset.value);
               setTargetUnit(preset.unit);
@@ -474,7 +535,9 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
       {forcedFormat ? (
         <div>
           <SettingLabel>출력 포맷</SettingLabel>
-          <p className="text-sm font-semibold">{forcedFormat === "webp" ? "WebP" : "AVIF"}</p>
+          <p className="text-sm font-semibold">
+            {forcedFormat === "webp" ? "WebP" : "AVIF"}
+          </p>
           {forcedFormat === "avif" && (
             <p className="mt-1 text-xs text-muted">
               AVIF는 큰 사진에서 수십 초가 걸릴 수 있습니다.
@@ -499,7 +562,13 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
 
   return (
     <ToolLayout
-      title={forcedFormat === "webp" ? "WebP 변환" : forcedFormat === "avif" ? "AVIF 변환" : "이미지 압축"}
+      title={
+        forcedFormat === "webp"
+          ? "WebP 변환"
+          : forcedFormat === "avif"
+            ? "AVIF 변환"
+            : "이미지 압축"
+      }
       summary={summary}
       settingsTitle={`${verb} 설정`}
       settings={settings}
@@ -513,6 +582,16 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
         />
       }
       onDropFiles={handleFiles}
+      primary={
+        <Button
+          variant="primary"
+          onClick={onPrimary}
+          disabled={queue.length === 0 || targetInvalid}
+          loading={isRunning}
+        >
+          {primaryLabel}
+        </Button>
+      }
       actions={
         <>
           <Button
@@ -523,8 +602,15 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
             <Plus aria-hidden="true" />
             파일 추가 (Ctrl+V)
           </Button>
-          <span className="mx-1 hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
-          <Button variant="ghost" onClick={() => setQueue([])} disabled={isRunning || queue.length === 0}>
+          <span
+            className="mx-1 hidden h-6 w-px bg-line sm:block"
+            aria-hidden="true"
+          />
+          <Button
+            variant="ghost"
+            onClick={() => setQueue([])}
+            disabled={isRunning || queue.length === 0}
+          >
             비우기
           </Button>
           <Button
@@ -533,14 +619,6 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
             loading={zipState === "busy"}
           >
             전체 ZIP 저장
-          </Button>
-          <Button
-            variant="primary"
-            onClick={onPrimary}
-            disabled={queue.length === 0 || targetInvalid}
-            loading={isRunning}
-          >
-            {primaryLabel}
           </Button>
         </>
       }
@@ -564,7 +642,11 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
 
       <div className="space-y-6">
         {notice && (
-          <InlineAlert tone="warning" title={notice} onDismiss={() => setNotice(null)} />
+          <InlineAlert
+            tone="warning"
+            title={notice}
+            onDismiss={() => setNotice(null)}
+          />
         )}
         {zipState === "error" && (
           <InlineAlert
@@ -581,12 +663,17 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
         )}
 
         {queue.length === 0 ? (
-          <Dropzone
-            accept={ACCEPT}
-            onFiles={handleFiles}
-            title="파일을 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
-            hint="눌러서 파일 선택 · PNG·JPEG·WebP·AVIF·GIF · 최대 10개 · 용량 제한 없음"
-            className="min-h-[min(60dvh,28rem)]"
+          <EmptyWall
+            title="대기"
+            first={
+              <Dropzone
+                accept={ACCEPT}
+                onFiles={handleFiles}
+                title="파일을 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
+                hint="눌러서 파일 선택 · PNG·JPEG·WebP·AVIF·GIF · 최대 10개 · 용량 제한 없음"
+                className="h-full min-h-0 py-6"
+              />
+            }
           />
         ) : (
           <ImageResultBoard
@@ -602,14 +689,20 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
             onRetry={(id) => void startCompression({ only: id })}
             onCompare={setCompareId}
             onSave={downloadSingle}
-            onCustomScale={(id, value) => updateItem(id, { customScale: value })}
+            onCustomScale={(id, value) =>
+              updateItem(id, { customScale: value })
+            }
             describeError={describeError}
           />
         )}
       </div>
 
       {compareItem && (
-        <ImageCompareDialog key={compareItem.id} item={compareItem} onClose={() => setCompareId(null)} />
+        <ImageCompareDialog
+          key={compareItem.id}
+          item={compareItem}
+          onClose={() => setCompareId(null)}
+        />
       )}
     </ToolLayout>
   );

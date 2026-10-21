@@ -89,7 +89,13 @@ export function CaptureCropEditor({
   };
 
   return (
-    <div className="absolute inset-0 overflow-y-auto overscroll-contain">
+    // 긴 페이지를 키보드로도 스크롤할 수 있게 초점을 받는 영역으로 둔다.
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label={`${name} 전체 페이지 캡처, 위아래로 스크롤`}
+      className="absolute inset-0 overflow-y-auto overscroll-contain"
+    >
       <div ref={pageRef} className="relative overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

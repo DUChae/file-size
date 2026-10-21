@@ -11,7 +11,7 @@ import { Dropzone } from "@/components/ui/dropzone";
 import { FocusTile } from "@/components/ui/focus-tile";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { ToolLayout } from "@/components/ui/tool-layout";
-import { TileBoard, type BoardTile } from "@/components/TileBoard";
+import { EmptyWall, TileBoard, type BoardTile } from "@/components/TileBoard";
 import { OriginalPreview } from "@/components/ImageResultBoard";
 import { useReportBusy } from "@/components/ToolActivity";
 import { usePasteImages, useReleaseBlobUrls } from "@/components/toolHooks";
@@ -587,6 +587,18 @@ export default function ImageToPdfConverter() {
         />
       }
       onDropFiles={handleFiles}
+      primary={
+        <Button
+          variant="primary"
+          onClick={() => void handleConvert()}
+          disabled={items.length === 0 || blockedByWarning}
+          loading={isBusy && !activeItemId}
+        >
+          {isBusy && !activeItemId
+            ? `PDF 만드는 중 ${progress} / ${items.length}`
+            : `PDF 만들기${items.length > 0 ? ` (${items.length}쪽)` : ""}`}
+        </Button>
+      }
       actions={
         <>
           <Button
@@ -608,16 +620,6 @@ export default function ImageToPdfConverter() {
             disabled={isBusy || items.length === 0}
           >
             비우기
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => void handleConvert()}
-            disabled={items.length === 0 || blockedByWarning}
-            loading={isBusy && !activeItemId}
-          >
-            {isBusy && !activeItemId
-              ? `PDF 만드는 중 ${progress} / ${items.length}`
-              : `PDF 만들기${items.length > 0 ? ` (${items.length}쪽)` : ""}`}
           </Button>
         </>
       }
@@ -688,12 +690,17 @@ export default function ImageToPdfConverter() {
         )}
 
         {items.length === 0 ? (
-          <Dropzone
-            accept={ACCEPT}
-            onFiles={handleFiles}
-            title="이미지를 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
-            hint="눌러서 파일 선택 · PNG·JPG·WebP · 넣은 순서가 페이지 순서가 됩니다"
-            className="min-h-[min(60dvh,28rem)]"
+          <EmptyWall
+            title="페이지 순서"
+            first={
+              <Dropzone
+                accept={ACCEPT}
+                onFiles={handleFiles}
+                title="이미지를 끌어 놓거나 Ctrl+V로 붙여 넣으세요"
+                hint="눌러서 파일 선택 · PNG·JPG·WebP · 넣은 순서가 페이지 순서가 됩니다"
+                className="h-full min-h-0 py-6"
+              />
+            }
           />
         ) : (
           <TileBoard

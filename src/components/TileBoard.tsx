@@ -25,6 +25,8 @@ export interface BoardTile {
   expandable: boolean;
   /** 마우스용 X 버튼과 Delete 키로 지울 수 있는가 */
   removable: boolean;
+  /** 같은 행 안에서 큰 값이 앞에 온다(완료 시각 등). 없으면 넣은 순서를 따른다. */
+  sortKey?: number;
 }
 
 export interface BoardGroup {
@@ -64,6 +66,7 @@ export function TileBoard({
 }: TileBoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const uid = useId();
+  const hintId = `${uid}-hint`;
   // 그리드 전체가 Tab 한 번에 들어오고, 안에서는 방향키로 옮긴다.
   const [rovingId, setRovingId] = useState<string | null>(null);
   const tabStopId =
@@ -76,7 +79,10 @@ export function TileBoard({
   const rows = groups
     .map((group) => ({
       ...group,
-      tiles: tiles.filter((tile) => tile.group === group.key),
+      // 최신 결과가 행 맨 앞에 서서 펼친 초점 타일이 행을 이끈다(안정 정렬이라 나머지 순서는 유지).
+      tiles: tiles
+        .filter((tile) => tile.group === group.key)
+        .sort((a, b) => (b.sortKey ?? 0) - (a.sortKey ?? 0)),
     }))
     .filter((group) => group.tiles.length > 0);
 
@@ -164,9 +170,8 @@ export function TileBoard({
   };
 
   return (
-    <div ref={boardRef} className="space-y-3">
-      {hint && <p className="text-xs text-muted">{hint}</p>}
-      <div className="flex flex-wrap items-start gap-x-8 gap-y-7">
+    <div ref={boardRef} className="space-y-4">
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-8">
         {rows.map((row) => {
           const hasExpanded = row.tiles.some((tile) => tile.id === expandedId);
           const basis =
@@ -182,7 +187,7 @@ export function TileBoard({
             >
               <h2
                 id={headingId}
-                className="flex items-baseline gap-1.5 text-base font-bold"
+                className="flex items-baseline gap-1.5 text-xl font-bold tracking-[-0.02em]"
               >
                 {row.title}
                 <span className="font-medium text-muted">
@@ -199,6 +204,7 @@ export function TileBoard({
                       tabIndex={tile.id === tabStopId ? 0 : -1}
                       role="group"
                       aria-label={`${tile.name} · ${tile.meta}`}
+                      aria-describedby={hint ? hintId : undefined}
                       onFocus={(event) => {
                         if (event.target !== event.currentTarget) return;
                         setRovingId(tile.id);
@@ -260,6 +266,47 @@ export function TileBoard({
           );
         })}
       </div>
+      {hint && (
+        <p id={hintId} className="text-xs text-muted">
+          {hint}
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * 파일이 아직 없을 때의 빈 행. 큰 드롭존 대신 행 제목과 16:10 빈 자리를 세우고,
+ * 첫 자리에 다음 행동(파일 추가·주소 입력 안내)을 둔다.
+ */
+export function EmptyWall({
+  title,
+  first,
+  placeholders = 4,
+}: {
+  title: string;
+  first: React.ReactNode;
+  placeholders?: number;
+}) {
+  return (
+    <section aria-label={`${title} (비어 있음)`} className="space-y-3">
+      <h2 className="flex items-baseline gap-1.5 text-xl font-bold tracking-[-0.02em]">
+        {title}
+        <span className="font-medium text-muted">(0)</span>
+      </h2>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+        <div className="col-span-2 aspect-[16/10]">{first}</div>
+        {Array.from({ length: placeholders }, (_, index) => (
+          <div
+            key={index}
+            aria-hidden="true"
+            className={cn(
+              "aspect-[16/10] rounded-tile border border-dashed border-line",
+              index >= 2 && "hidden sm:block",
+            )}
+          />
+        ))}
+      </div>
+    </section>
   );
 }

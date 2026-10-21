@@ -10,8 +10,8 @@ import { InlineAlert } from "@/components/ui/inline-alert";
 import { ChipGroup } from "@/components/ui/chip-group";
 import { NumberField } from "@/components/ui/number-field";
 import { ToolLayout } from "@/components/ui/tool-layout";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
+  EmptyWall,
   TileBoard,
   type BoardGroup,
   type BoardTile,
@@ -445,9 +445,7 @@ export default function UrlCaptureOptimizer() {
   // 여러 사이트를 한 번에 요청하지 않도록 차례로 처리한다.
   const captureAll = async () => {
     setManualFocusId(null);
-    for (const item of urls.filter(
-      (u) => u.status === "idle",
-    )) {
+    for (const item of urls.filter((u) => u.status === "idle")) {
       await handleCapture(item);
     }
   };
@@ -506,9 +504,7 @@ export default function UrlCaptureOptimizer() {
       status: "captured",
     });
 
-  const idleCount = urls.filter(
-    (u) => u.status === "idle",
-  ).length;
+  const idleCount = urls.filter((u) => u.status === "idle").length;
   const capturedCount = urls.filter(
     (u) => u.status === "captured" || (u.status === "error" && u.captureData),
   ).length;
@@ -540,6 +536,10 @@ export default function UrlCaptureOptimizer() {
       name: item.displayUrl,
       expandable: isExpandable(item),
       removable: item.status !== "capturing" && item.status !== "compressing",
+      sortKey:
+        item.status === "done" || item.status === "captured"
+          ? item.completedAt
+          : undefined,
       thumbnailTop: true,
       thumbnail: data?.sourceUrl ? undefined : (
         <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
@@ -662,6 +662,16 @@ export default function UrlCaptureOptimizer() {
           </p>
         </div>
       }
+      primary={
+        <Button
+          variant="primary"
+          onClick={() => void primary.run()}
+          disabled={urls.length === 0}
+          loading={running}
+        >
+          {running ? `처리 중 (${processingCount})` : primary.label}
+        </Button>
+      }
       actions={
         <>
           <Button
@@ -683,14 +693,6 @@ export default function UrlCaptureOptimizer() {
               압축 시작 ({capturedCount})
             </Button>
           )}
-          <Button
-            variant="primary"
-            onClick={() => void primary.run()}
-            disabled={urls.length === 0}
-            loading={running}
-          >
-            {running ? `처리 중 (${processingCount})` : primary.label}
-          </Button>
         </>
       }
     >
@@ -720,7 +722,7 @@ export default function UrlCaptureOptimizer() {
               }
             }}
             rows={1}
-            placeholder="example.com · 여러 개는 줄바꿈(Shift+Enter)이나 쉼표로 구분"
+            placeholder="example.com (여러 개는 줄바꿈·쉼표)"
             aria-invalid={inputError ? true : undefined}
             aria-describedby={inputError ? "capture-url-error" : undefined}
             className="block min-h-10 w-full resize-y rounded-lg border border-line bg-bg px-3 py-2 text-base text-text outline-none transition-colors hover:border-line-strong focus:border-text"
@@ -750,11 +752,20 @@ export default function UrlCaptureOptimizer() {
         )}
 
         {urls.length === 0 ? (
-          <EmptyState
-            icon={Globe2}
-            title="캡처할 웹페이지 주소를 위에 입력하세요"
-            description="페이지 전체를 캡처한 뒤, 저장할 영역을 골라 원하는 포맷으로 압축합니다. 캡처에는 수십 초가 걸릴 수 있습니다."
-            className="min-h-[min(50dvh,24rem)]"
+          <EmptyWall
+            title="대기"
+            first={
+              <div className="flex h-full flex-col items-center justify-center gap-2 rounded-tile border border-dashed border-line-strong px-6 text-center">
+                <Globe2 className="size-6 text-muted" aria-hidden="true" />
+                <p className="text-base font-semibold">
+                  위에 주소를 넣고 캡처 시작을 누르세요
+                </p>
+                <p className="text-xs text-muted">
+                  페이지 전체를 캡처한 뒤 저장할 영역을 골라 압축합니다.
+                  캡처에는 수십 초가 걸릴 수 있습니다.
+                </p>
+              </div>
+            }
           />
         ) : (
           <TileBoard

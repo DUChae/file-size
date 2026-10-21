@@ -345,6 +345,7 @@ export function ImageResultBoard({
       checkerboard: mayHaveAlpha(item),
       expandable: isExpandable(item),
       removable: !isRunning && (status === "queued" || status === "error"),
+      sortKey: status === "done" ? item.completedAt : undefined,
     };
   });
 
