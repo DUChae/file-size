@@ -17,6 +17,8 @@ import {
   Loader2,
   Trash2,
 } from "lucide-react";
+import { formatSize } from "@/lib/format";
+import { useReportBusy } from "@/components/ToolActivity";
 
 const A4_WIDTH_PT = 595.28;
 const A4_HEIGHT_PT = 841.89;
@@ -48,14 +50,6 @@ interface PreparedImage {
   compressedSize: number;
   pageWidth: number;
   pageHeight: number;
-}
-
-function formatSize(bytes: number) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 function sanitizeFilename(name: string) {
@@ -222,6 +216,7 @@ export default function ImageToPdfConverter() {
   const itemsRef = useRef<ImageQueueItem[]>([]);
 
   const isBusy = status === "compressing";
+  useReportBusy(isBusy ? 1 : 0);
   const totalOriginalSize = useMemo(
     () => items.reduce((sum, item) => sum + item.size, 0),
     [items],
@@ -493,7 +488,7 @@ export default function ImageToPdfConverter() {
               <FileImage className="w-4 h-4" />
               Document Assembly
             </h4>
-            <h2 className="text-4xl font-black text-white tracking-ultra-tight uppercase">
+            <h2 className="text-4xl font-black text-white tracking-[-0.035em] uppercase">
               Image to PDF
             </h2>
           </div>
@@ -516,8 +511,7 @@ export default function ImageToPdfConverter() {
               }}
             />
             <Button
-              variant="outline"
-              size="lg"
+              variant="secondary"
               asChild
               className="rounded-full border-white/10 hover:bg-white/5 text-white h-14 px-10"
             >
@@ -528,8 +522,7 @@ export default function ImageToPdfConverter() {
             </Button>
           </label>
           <Button
-            variant="blue"
-            size="lg"
+            variant="primary"
             onClick={handleConvert}
             disabled={items.length === 0 || isBusy}
             className="rounded-2xl h-14 px-8 text-xs font-black tracking-widest active:scale-[0.98]"
@@ -679,7 +672,7 @@ export default function ImageToPdfConverter() {
                 </div>
                 <div className="col-span-2 flex items-center justify-end gap-2 md:col-span-1">
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     onClick={() => {
                       void handleConvertSingle(item);
@@ -697,7 +690,7 @@ export default function ImageToPdfConverter() {
                   </Button>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    iconOnly
                     onClick={() => moveItem(index, -1)}
                     disabled={isBusy || index === 0}
                     className="rounded-full text-slate-500 hover:bg-white/5 hover:text-white"
@@ -707,7 +700,7 @@ export default function ImageToPdfConverter() {
                   </Button>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    iconOnly
                     onClick={() => moveItem(index, 1)}
                     disabled={isBusy || index === items.length - 1}
                     className="rounded-full text-slate-500 hover:bg-white/5 hover:text-white"
@@ -717,7 +710,7 @@ export default function ImageToPdfConverter() {
                   </Button>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    iconOnly
                     onClick={() => removeItem(item.id)}
                     disabled={isBusy}
                     className="rounded-full text-slate-500 hover:bg-red-500/10 hover:text-red-400"

@@ -21,6 +21,8 @@ import {
   PdfCompressionResult,
   compressPdf,
 } from "@/utils/pdfCompression";
+import { formatSize } from "@/lib/format";
+import { useReportBusy } from "@/components/ToolActivity";
 
 const MAX_PDF_SIZE = 100 * 1024 * 1024;
 const DEFAULT_QUALITY = 75;
@@ -31,14 +33,6 @@ const IMAGE_SIDE_OPTIONS = [
   { value: 1200, label: "1200px" },
 ] as const;
 const RASTER_DPI_OPTIONS = [72, 100, 150, 200] as const;
-
-function formatSize(bytes: number) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 async function trackPdfEvent(payload: Record<string, unknown>) {
   try {
@@ -71,6 +65,7 @@ export default function PdfCompressor() {
   const [result, setResult] = useState<PdfCompressionResult | null>(null);
 
   const isBusy = status === "compressing";
+  useReportBusy(isBusy ? 1 : 0);
 
   const handleFileChange = (nextFile: File | null) => {
     setError(null);
@@ -182,7 +177,7 @@ export default function PdfCompressor() {
               <FileDown className="w-4 h-4" />
               Document Processing
             </h4>
-            <h2 className="text-4xl font-black text-white tracking-ultra-tight uppercase">
+            <h2 className="text-4xl font-black text-white tracking-[-0.035em] uppercase">
               PDF Compression
             </h2>
           </div>
@@ -204,8 +199,7 @@ export default function PdfCompressor() {
               }}
             />
             <Button
-              variant="outline"
-              size="lg"
+              variant="secondary"
               asChild
               className="rounded-full border-white/10 hover:bg-white/5 text-white h-14 px-10"
             >
@@ -216,8 +210,7 @@ export default function PdfCompressor() {
             </Button>
           </label>
           <Button
-            variant="blue"
-            size="lg"
+            variant="primary"
             onClick={handleCompress}
             disabled={!file || isBusy}
             className="rounded-2xl h-14 px-8 text-xs font-black tracking-widest active:scale-[0.98]"
@@ -402,7 +395,6 @@ export default function PdfCompressor() {
           </div>
           {isSmaller && (
             <Button
-              size="lg"
               onClick={handleDownload}
               className="rounded-2xl h-14 px-8 text-xs font-black tracking-widest bg-white text-black hover:bg-teal-100 active:scale-[0.98]"
             >

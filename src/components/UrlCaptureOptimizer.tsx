@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { OutputFormat, UrlCaptureResponse } from "@/types/image";
 import { requestCompression } from "@/utils/compression";
+import { useReportBusy } from "@/components/ToolActivity";
 
 type CaptureStatus = "idle" | "capturing" | "captured" | "compressing" | "done" | "error";
 
@@ -52,13 +53,6 @@ const FORMAT_OPTIONS: Array<Exclude<OutputFormat, "original" | "gif">> = [
   "webp",
   "avif",
 ];
-
-function formatSize(bytes: number) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
 
 function createCaptureItem(rawUrl: string): CaptureItem | null {
   const normalized = rawUrl.trim().replace(/[)\].,;]+$/g, "");
@@ -96,6 +90,9 @@ export default function UrlCaptureOptimizer() {
   const [inputUrl, setInputUrl] = useState("");
   const [globalFormat, setGlobalFormat] = useState<OutputFormat>("png");
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  useReportBusy(
+    urls.filter((item) => item.status === "capturing" || item.status === "compressing").length,
+  );
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   const activeItem = urls.find((item) => item.id === activeItemId);
@@ -353,7 +350,7 @@ export default function UrlCaptureOptimizer() {
           {urls.length > 0 && (
             <div className="flex gap-4">
               <Button 
-                variant="outline" 
+                variant="secondary" 
                 onClick={handleBatchCapture}
                 disabled={urls.every(u => u.status !== "idle" && u.status !== "error")}
                 className="rounded-full border-white/10 text-xs font-black"
@@ -361,7 +358,7 @@ export default function UrlCaptureOptimizer() {
                 일괄 캡처 ({urls.filter(u => u.status === "idle" || u.status === "error").length})
               </Button>
               <Button 
-                variant="blue" 
+                variant="primary" 
                 onClick={handleBatchCompress}
                 disabled={!urls.some(u => u.status === "captured" || u.status === "done")}
                 className="rounded-full text-xs font-black px-8"
@@ -388,7 +385,7 @@ export default function UrlCaptureOptimizer() {
               }}
             />
           </div>
-          <Button type="submit" variant="blue" size="xl" className="rounded-2xl px-10">
+          <Button type="submit" variant="primary" className="rounded-2xl px-10">
             큐에 추가
           </Button>
         </form>
@@ -462,13 +459,13 @@ export default function UrlCaptureOptimizer() {
               </div>
               <div className="flex gap-3">
                 {(activeItem.status === "idle" || activeItem.status === "error") && (
-                  <Button variant="blue" onClick={() => handleCapture(activeItem)} className="rounded-full px-8">
+                  <Button variant="primary" onClick={() => handleCapture(activeItem)} className="rounded-full px-8">
                     Start Capture
                   </Button>
                 )}
                 {activeItem.captureData?.downloadUrl && (
                   <Button 
-                    variant="outline" 
+                    variant="secondary" 
                     onClick={() => saveAs(activeItem.captureData!.downloadUrl!, activeItem.captureData!.filename!)}
                     className="rounded-full border-white/10 text-xs font-black"
                   >
@@ -561,8 +558,7 @@ export default function UrlCaptureOptimizer() {
                 </div>
                 <Button 
                   onClick={() => handleCompress(activeItem)} 
-                  variant="blue" 
-                  size="xl" 
+                  variant="primary" 
                   className="w-full rounded-2xl"
                   disabled={activeItem.status === "compressing"}
                 >

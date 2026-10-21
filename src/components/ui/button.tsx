@@ -1,38 +1,42 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border font-semibold transition-colors duration-150 disabled:pointer-events-none disabled:opacity-45 aria-busy:cursor-progress [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
-        outline:
-          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+        // 화면마다 하나만 둔다. 노란색은 주 버튼과 초점 테두리에만 쓴다.
+        primary:
+          "border-accent bg-accent text-accent-ink hover:border-accent-hover hover:bg-accent-hover",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-        glass: "bg-white/[0.045] border border-white/10 text-white hover:bg-white/[0.075] transition-all",
-        blue: "bg-white text-black shadow-lg shadow-white/10 hover:bg-teal-100 transition-all",
+          "border-line bg-surface text-text hover:border-line-strong hover:bg-surface-2",
+        ghost:
+          "border-transparent bg-transparent text-muted hover:bg-surface hover:text-text",
+        danger:
+          "border-line bg-surface text-danger hover:border-danger/50 hover:bg-danger/10",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
-        xl: "h-12 rounded-2xl px-10 text-base font-bold",
-        icon: "h-9 w-9",
+        sm: "h-8 px-3 text-xs",
+        md: "h-10 px-4 text-sm",
+      },
+      iconOnly: {
+        true: "px-0",
+        false: "",
       },
     },
+    compoundVariants: [
+      { size: "sm", iconOnly: true, className: "w-8" },
+      { size: "md", iconOnly: true, className: "w-10" },
+    ],
     defaultVariants: {
-      variant: "default",
-      size: "default",
+      variant: "secondary",
+      size: "md",
+      iconOnly: false,
     },
   }
 )
@@ -41,17 +45,48 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
+  /** 처리 중 표시. 누를 수 없게 하고 회전 아이콘을 앞에 붙인다. */
+  loading?: boolean
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
+  (
+    {
+      className,
+      variant,
+      size,
+      iconOnly,
+      asChild = false,
+      loading = false,
+      disabled,
+      children,
+      type,
+      ...props
+    },
+    ref
+  ) => {
+    const classes = cn(buttonVariants({ variant, size, iconOnly, className }))
+
+    if (asChild) {
+      return (
+        <Slot className={classes} ref={ref} {...props}>
+          {children}
+        </Slot>
+      )
+    }
+
     return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+      <button
         ref={ref}
+        type={type ?? "button"}
+        className={classes}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
         {...props}
-      />
+      >
+        {loading && <Loader2 className="animate-spin" aria-hidden="true" />}
+        {loading && iconOnly ? null : children}
+      </button>
     )
   }
 )

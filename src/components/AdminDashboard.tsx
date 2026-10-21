@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
@@ -21,7 +20,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { 
   BarChart3, 
-  ArrowLeft, 
   Calendar, 
   Users, 
   Files, 
@@ -37,6 +35,7 @@ import {
   MousePointer2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatSize } from "@/lib/format";
 
 type RangeKey = "7d" | "30d" | "365d";
 type AdminTab = "analytics" | "feedback";
@@ -62,24 +61,9 @@ function formatCount(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
-function formatBytes(value: number) {
-  if (value <= 0) return "0 B";
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const unitIndex = Math.min(
-    Math.floor(Math.log(value) / Math.log(1024)),
-    units.length - 1,
-  );
-  const size = value / Math.pow(1024, unitIndex);
-
-  return `${size.toLocaleString("ko-KR", {
-    maximumFractionDigits: size >= 10 || unitIndex === 0 ? 0 : 1,
-  })} ${units[unitIndex]}`;
-}
-
 function StatCard({ label, value, icon: Icon, subValue }: { label: string; value: number | string; icon: React.ComponentType<{ className?: string }>; subValue?: string }) {
   return (
-    <Card className="glass-card border-white/5 rounded-2xl p-5 space-y-3">
+    <Card className="p-5 space-y-3">
       <div className="flex items-center justify-between">
         <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
           {label}
@@ -112,7 +96,7 @@ function ChartCard({
   icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <Card className="glass-card border-white/5 rounded-[24px] overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="border-b border-white/5 bg-white/[0.01] p-6">
         <div className="flex items-center gap-3">
            <div className="p-2 rounded-xl bg-blue-600/10 text-blue-500">
@@ -388,19 +372,12 @@ export default function AdminDashboard({
   };
 
   return (
-    <main className="min-h-screen bg-black px-6 py-20 text-slate-50 animate-fade-in">
+    <div className="w-full px-4 py-8 md:px-8 md:py-10 animate-fade-in">
       <div className="mx-auto max-w-6xl space-y-16">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 pb-12 border-b border-white/5">
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Link href="/">
-                <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/5 text-slate-500 hover:text-white">
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-              </Link>
-              <h1 className="text-3xl font-black tracking-ultra-tight uppercase">Dashboard</h1>
-            </div>
+            <h1 className="text-title font-bold tracking-[-0.02em]">대시보드</h1>
             <p className="text-sm text-slate-500 font-medium">실시간 시스템 메트릭 및 사용자 피드백 분석</p>
           </div>
 
@@ -453,7 +430,7 @@ export default function AdminDashboard({
               <StatCard label="Total Page Views" value={dashboard.totals.pageViews} icon={MousePointer2} />
               <StatCard label="Unique Visitors" value={dashboard.totals.uniqueVisitors} icon={Users} />
               <StatCard label="Assets Received" value={dashboard.totals.filesSent} icon={Files} />
-              <StatCard label="Optimization Saved" value={formatBytes(dashboard.totals.totalBytesSaved)} icon={Save} />
+              <StatCard label="Optimization Saved" value={formatSize(dashboard.totals.totalBytesSaved)} icon={Save} />
               <StatCard label="Job Succeeded" value={dashboard.totals.conversionsSucceeded} icon={CheckCircle2} />
               <StatCard label="Job Failed" value={dashboard.totals.conversionsFailed} icon={AlertCircle} />
               <StatCard label="Image Processed" value={dashboard.totals.imageSuccess} icon={ImageIcon} />
@@ -518,7 +495,7 @@ export default function AdminDashboard({
             </div>
 
             {/* Error Logs Table */}
-            <Card className="glass-card border-white/5 rounded-[32px] overflow-hidden">
+            <Card className="overflow-hidden">
                <CardHeader className="p-8 border-b border-white/5 bg-white/[0.01]">
                  <div className="flex items-center justify-between">
                     <div>
@@ -585,7 +562,7 @@ export default function AdminDashboard({
               </div>
             )}
 
-            <Card className="glass-card border-white/5 rounded-[32px] overflow-hidden">
+            <Card className="overflow-hidden">
                <CardHeader className="p-8 border-b border-white/5 bg-white/[0.01]">
                  <div className="flex items-center justify-between">
                     <div>
@@ -641,7 +618,7 @@ export default function AdminDashboard({
                             <td className="px-8 py-6 text-right">
                               <Button 
                                 variant="ghost" 
-                                size="icon"
+                                iconOnly
                                 onClick={() => void handleDeleteFeedback(entry.id)}
                                 disabled={deletingId === entry.id}
                                 className="w-10 h-10 rounded-full text-slate-600 hover:text-red-500 hover:bg-red-500/10"
@@ -659,6 +636,6 @@ export default function AdminDashboard({
           </TabsContent>
         </Tabs>
       </div>
-    </main>
+    </div>
   );
 }

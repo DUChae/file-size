@@ -70,7 +70,7 @@ export default function FeedbackForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="glass-panel rounded-[32px] p-8 md:p-10"
+      className="rounded-tile border border-line bg-surface p-6 md:p-8"
     >
       <div className="grid gap-8">
         <div>

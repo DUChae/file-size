@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { formatSize } from "@/lib/format";
+import { renamePastedFiles, shouldHandlePaste } from "@/lib/clipboard";
+import { useReportBusy, useToolActive } from "@/components/ToolActivity";
 
 const MAX_FILES = 10;
 const CONCURRENCY = 2;
@@ -34,31 +37,6 @@ function parseTargetBytes(value: string, unit: TargetUnit) {
   return bytes >= 1024 ? bytes : null;
 }
 
-const PASTE_EXTENSIONS: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  "image/avif": "avif",
-};
-
-// Clipboard images all arrive as "image.png"; give each a distinct, dated name.
-function renamePastedFiles(files: File[]) {
-  const stamp = new Date()
-    .toISOString()
-    .slice(0, 19)
-    .replace(/[-:]/g, "")
-    .replace("T", "-");
-  return files.map((file, index) => {
-    const ext = PASTE_EXTENSIONS[file.type] ?? "png";
-    const suffix = files.length > 1 ? `-${index + 1}` : "";
-    return new File([file], `pasted-${stamp}${suffix}.${ext}`, {
-      type: file.type,
-      lastModified: Date.now(),
-    });
-  });
-}
-
 interface CompressionJob {
   item: QueueItem;
   scalePercent: number;
@@ -66,14 +44,6 @@ interface CompressionJob {
 
 function createId() {
   return Math.random().toString(36).substring(2, 9);
-}
-
-function formatSize(bytes: number) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
 // createImageBitmap applies EXIF orientation, matching sharp's rotate() on the server.
@@ -195,12 +165,17 @@ export default function ImageOptimizer({
     [queue.length, activeFormat, updateItem],
   );
 
+  const active = useToolActive();
+  useReportBusy(
+    queue.filter((item) => item.status === "compressing" || item.status === "uploading").length,
+  );
+
   useEffect(() => {
+    // 숨겨진 도구(다른 탭)는 붙여넣기를 받지 않는다.
+    if (!active) return;
     const onPaste = (event: ClipboardEvent) => {
       // Leave pastes into text fields alone, and ignore them while a modal is open.
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable='true']")) return;
-      if (document.querySelector("dialog[open]")) return;
+      if (!shouldHandlePaste(event)) return;
 
       const images = Array.from(event.clipboardData?.files ?? []).filter(
         (file) => file.type.startsWith("image/"),
@@ -211,7 +186,7 @@ export default function ImageOptimizer({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [handleFiles]);
+  }, [handleFiles, active]);
 
   const runJob = useCallback(
     async ({ item, scalePercent }: CompressionJob) => {
@@ -318,7 +293,7 @@ export default function ImageOptimizer({
             <h4 className="text-xs font-semibold text-slate-500">
               Configuration
             </h4>
-            <h3 className="text-3xl font-black tracking-ultra-tight text-white flex items-center gap-4">
+            <h3 className="text-3xl font-black tracking-[-0.035em] text-white flex items-center gap-4">
               {forcedFormat ? (
                 <>
                   <span className="text-teal-300">
