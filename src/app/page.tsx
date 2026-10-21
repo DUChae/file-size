@@ -1,6 +1,7 @@
 import ToolWorkspace from "@/components/ToolWorkspace";
 import VisitorTracker from "@/components/VisitorTracker";
 import BackgroundAnimation from "@/components/BackgroundAnimation";
+import ReleaseNotice from "@/components/ReleaseNotice";
 import Link from "next/link";
 import { MessageSquare, BarChart3 } from "lucide-react";
 
@@ -8,6 +9,7 @@ export default function Home() {
   return (
     <main className="relative min-h-[100dvh] text-slate-50 overflow-hidden">
       <VisitorTracker />
+      <ReleaseNotice />
       <BackgroundAnimation />
 
       <nav className="relative z-20 max-w-6xl mx-auto px-5 pt-6 flex justify-end gap-2">
