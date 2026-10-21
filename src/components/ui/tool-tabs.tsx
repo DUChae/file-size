@@ -33,11 +33,12 @@ export function ToolTabs<T extends string>({
     const list = listRef.current;
     const current = list?.querySelector<HTMLElement>('[aria-current="page"]');
     if (!list || !current) return;
+    if (list.scrollWidth <= list.clientWidth) return;
+    // 가운데로 맞춰 양옆 탭이 일부 보이게 한다(더 스크롤된다는 단서).
     const listBox = list.getBoundingClientRect();
     const box = current.getBoundingClientRect();
-    if (box.left < listBox.left || box.right > listBox.right) {
-      list.scrollLeft += box.left - listBox.left - 16;
-    }
+    list.scrollLeft +=
+      box.left + box.width / 2 - (listBox.left + listBox.width / 2);
   }, [activeId]);
 
   return (
