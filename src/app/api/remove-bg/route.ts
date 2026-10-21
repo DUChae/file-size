@@ -164,7 +164,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const nodeBuffer = Buffer.from(imageBuffer);
+    let nodeBuffer: Buffer = Buffer.from(imageBuffer);
+
+    // 원본을 그대로 받으므로 EXIF 방향(휴대폰 사진)을 여기서 픽셀에 반영합니다.
+    // 무손실 PNG로 바꿔 두 처리 경로 모두 회전된 이미지를 받게 합니다.
+    const orientation = await sharp(nodeBuffer)
+      .metadata()
+      .then((metadata) => metadata.orientation, () => undefined);
+    if (orientation && orientation > 1) {
+      nodeBuffer = await sharp(nodeBuffer).rotate().png().toBuffer();
+      imageBuffer = new Uint8Array(nodeBuffer).buffer;
+      mimeType = "image/png";
+    }
 
     // 1단계: 로고/단색 배경 이미지 스마트 고속 분리 (문체부 로고 등 그래픽 이미지 초고속 100% 성공 보장)
     const smartResult = await trySmartUniformBgRemoval(nodeBuffer);
