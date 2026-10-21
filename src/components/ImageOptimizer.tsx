@@ -15,9 +15,9 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ToolLayout } from "@/components/ui/tool-layout";
 import { formatSize } from "@/lib/format";
-import { renamePastedFiles, shouldHandlePaste } from "@/lib/clipboard";
 import { readImageInfo } from "@/lib/thumbnail";
-import { useReportBusy, useToolActive } from "@/components/ToolActivity";
+import { useReportBusy } from "@/components/ToolActivity";
+import { useNow, usePasteImages, useReleaseBlobUrls } from "@/components/toolHooks";
 
 const MAX_FILES = 10;
 const CONCURRENCY = 2;
@@ -116,32 +116,17 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
   const [notice, setNotice] = useState<string | null>(null);
   const [zipState, setZipState] = useState<"idle" | "busy" | "error">("idle");
   const [announcement, setAnnouncement] = useState("");
-  const [now, setNow] = useState(() => Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const targetBytes = parseTargetBytes(targetValue, targetUnit);
   const targetInvalid = sizeMode === "target" && targetBytes === null;
   const verb = forcedFormat ? "변환" : "압축";
 
-  // Results and thumbnails are blob: URLs; release the ones that leave the queue
-  // (re-compression, removal, 비우기) and whatever is left when the component unmounts.
-  const liveUrlsRef = useRef(new Set<string>());
+  // 결과·미리보기 blob URL은 목록에서 빠지거나(삭제·비우기·다시 압축) 화면이 사라질 때 해제한다.
+  useReleaseBlobUrls(queue.flatMap((item) => [item.optimizedUrl, item.thumbnailUrl]));
   const queueRef = useRef(queue);
   useEffect(() => {
     queueRef.current = queue;
-    const current = new Set(
-      queue.flatMap((item) =>
-        [item.optimizedUrl, item.thumbnailUrl].filter((url): url is string => Boolean(url)),
-      ),
-    );
-    liveUrlsRef.current.forEach((url) => {
-      if (!current.has(url)) URL.revokeObjectURL(url);
-    });
-    liveUrlsRef.current = current;
   }, [queue]);
-  useEffect(() => {
-    const liveUrls = liveUrlsRef;
-    return () => liveUrls.current.forEach((url) => URL.revokeObjectURL(url));
-  }, []);
 
   const updateItem = useCallback(
     (id: string, patch: Partial<QueueItem>) =>
@@ -194,41 +179,17 @@ export default function ImageOptimizer({ forcedFormat }: { forcedFormat?: "webp"
     [activeFormat, updateItem],
   );
 
-  const active = useToolActive();
   const processingCount = queue.filter(
     (item) => item.status === "compressing" || item.status === "uploading",
   ).length;
   useReportBusy(processingCount);
+  usePasteImages(handleFiles);
 
-  useEffect(() => {
-    // 숨겨진 도구(다른 탭)는 붙여넣기를 받지 않는다.
-    if (!active) return;
-    const onPaste = (event: ClipboardEvent) => {
-      // Leave pastes into text fields alone, and ignore them while a modal is open.
-      if (!shouldHandlePaste(event)) return;
-
-      const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
-        file.type.startsWith("image/"),
-      );
-      if (images.length === 0) return;
-      event.preventDefault();
-      handleFiles(renamePastedFiles(images));
-    };
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [handleFiles, active]);
-
-  // 처리 중일 때만 1초마다 경과 시간을 갱신한다.
-  useEffect(() => {
-    if (processingCount === 0) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [processingCount]);
+  const now = useNow(processingCount > 0);
 
   const runJob = useCallback(
     async ({ item, scalePercent }: CompressionJob) => {
       updateItem(item.id, { status: "compressing", startedAt: Date.now() });
-      setNow(Date.now());
       const name = item.originalFile.name;
       try {
         const res = await compressImage(item.originalFile, {

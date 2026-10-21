@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 interface FocusTileProps {
   /** 비교 슬라이더·캡처 크롭·PDF 미리보기 등 왼쪽 미디어 영역 */
   media: React.ReactNode;
+  /** 미디어 영역 크기를 바꿀 때(기본 16:10). 예: 긴 캡처를 스크롤하는 편집 영역 */
+  mediaClassName?: string;
   /** 목표 달성 여부 같은 짧은 판정. 색만으로 구분하지 않게 아이콘이 붙는다. */
   badge?: { tone: "success" | "warning" | "neutral"; label: React.ReactNode };
   title: string;
@@ -31,6 +33,7 @@ const BADGE = {
 
 export function FocusTile({
   media,
+  mediaClassName,
   badge,
   title,
   subtitle,
@@ -53,7 +56,12 @@ export function FocusTile({
         className,
       )}
     >
-      <div className="relative aspect-[16/10] w-full shrink-0 bg-bg @min-[54rem]:w-[544px]">
+      <div
+        className={cn(
+          "relative aspect-[16/10] w-full shrink-0 bg-bg @min-[54rem]:w-[544px]",
+          mediaClassName,
+        )}
+      >
         {media}
       </div>
       <div className="flex min-w-0 flex-1 flex-col p-5 @min-[54rem]:w-[292px] @min-[54rem]:flex-none">

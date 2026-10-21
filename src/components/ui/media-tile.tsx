@@ -19,6 +19,8 @@ interface MediaTileProps {
   thumbnailUrl?: string;
   /** PDF 페이지 캔버스처럼 이미지가 아닌 썸네일 */
   thumbnail?: React.ReactNode;
+  /** 긴 페이지 캡처처럼 위쪽을 기준으로 자른다 */
+  thumbnailTop?: boolean;
   /** 이름 아래 한 줄. 예: "2.4 MB · 압축 중 62%" */
   meta?: React.ReactNode;
   /** 0~1. 처리 중인데 값이 없으면 무한 진행 막대를 그린다. */
@@ -42,6 +44,7 @@ export function MediaTile({
   status,
   thumbnailUrl,
   thumbnail,
+  thumbnailTop,
   meta,
   progress,
   error,
@@ -77,7 +80,10 @@ export function MediaTile({
             <img
               src={thumbnailUrl}
               alt=""
-              className="absolute inset-0 size-full object-cover"
+              className={cn(
+                "absolute inset-0 size-full object-cover",
+                thumbnailTop && "object-top",
+              )}
               draggable={false}
             />
           ))}
@@ -106,8 +112,8 @@ export function MediaTile({
         )}
 
         {status === "error" && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg/80 p-3 text-center">
-            <p className="text-sm font-semibold text-danger">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg/80 px-3 pb-3 pt-11 text-center">
+            <p className="line-clamp-3 text-sm font-semibold text-danger">
               {error ?? "처리하지 못했습니다"}
             </p>
             {onRetry && (
