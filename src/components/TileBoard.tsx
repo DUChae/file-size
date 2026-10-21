@@ -19,6 +19,7 @@ export interface BoardTile {
   thumbnail?: React.ReactNode;
   /** 썸네일을 위쪽 기준으로 자른다(긴 페이지 캡처 등) */
   thumbnailTop?: boolean;
+  thumbnailContain?: boolean;
   error?: string;
   checkerboard?: boolean;
   expandable: boolean;
@@ -226,6 +227,7 @@ export function TileBoard({
                           thumbnailUrl={tile.thumbnailUrl}
                           thumbnail={tile.thumbnail}
                           thumbnailTop={tile.thumbnailTop}
+                          thumbnailContain={tile.thumbnailContain}
                           meta={tile.meta}
                           error={tile.error}
                           onRetry={onRetry ? () => onRetry(tile.id) : undefined}

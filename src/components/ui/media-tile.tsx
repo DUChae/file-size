@@ -21,6 +21,8 @@ interface MediaTileProps {
   thumbnail?: React.ReactNode;
   /** 긴 페이지 캡처처럼 위쪽을 기준으로 자른다 */
   thumbnailTop?: boolean;
+  /** 문서 페이지처럼 잘리지 않게 전체를 보여 준다 */
+  thumbnailContain?: boolean;
   /** 이름 아래 한 줄. 예: "2.4 MB · 압축 중 62%" */
   meta?: React.ReactNode;
   /** 0~1. 처리 중인데 값이 없으면 무한 진행 막대를 그린다. */
@@ -36,6 +38,8 @@ interface MediaTileProps {
   checkerboard?: boolean;
   /** 썸네일 오른쪽 위에 겹치는 작은 버튼(삭제 등) */
   actions?: React.ReactNode;
+  /** 상태가 의미 없는 미리보기(PDF 페이지 등)에서는 상태를 읽어 주지 않는다 */
+  announceStatus?: boolean;
   className?: string;
 }
 
@@ -45,6 +49,7 @@ export function MediaTile({
   thumbnailUrl,
   thumbnail,
   thumbnailTop,
+  thumbnailContain,
   meta,
   progress,
   error,
@@ -54,6 +59,7 @@ export function MediaTile({
   dimmed,
   checkerboard,
   actions,
+  announceStatus = true,
   className,
 }: MediaTileProps) {
   const percent =
@@ -81,7 +87,8 @@ export function MediaTile({
               src={thumbnailUrl}
               alt=""
               className={cn(
-                "absolute inset-0 size-full object-cover",
+                "absolute inset-0 size-full",
+                thumbnailContain ? "object-contain p-2" : "object-cover",
                 thumbnailTop && "object-top",
               )}
               draggable={false}
@@ -146,7 +153,9 @@ export function MediaTile({
           )}
         </p>
         <p className="truncate text-xs text-muted">
-          <span className="sr-only">{STATUS_LABEL[status]} · </span>
+          {announceStatus && (
+            <span className="sr-only">{STATUS_LABEL[status]} · </span>
+          )}
           {meta}
         </p>
       </div>
