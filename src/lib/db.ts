@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 );
 CREATE INDEX IF NOT EXISTS analytics_events_created_at_idx ON analytics_events (created_at DESC);
 CREATE INDEX IF NOT EXISTS analytics_events_type_created_at_idx ON analytics_events (type, created_at);
+-- 그룹웨어 사용자. 그룹웨어 연동 전에 쌓인 행은 NULL이다.
+ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS user_name TEXT;
+CREATE INDEX IF NOT EXISTS analytics_events_user_created_at_idx ON analytics_events (user_id, created_at DESC);
+
+ALTER TABLE feedback ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE feedback ADD COLUMN IF NOT EXISTS user_name TEXT;
 
 CREATE TABLE IF NOT EXISTS analytics_visitors (
   visitor_id  TEXT PRIMARY KEY,

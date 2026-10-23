@@ -1,9 +1,13 @@
 import { db, query } from "@/lib/db";
+import { getCurrentUser, type SessionUser } from "@/lib/auth";
 
 const TREND_DAYS = 365;
 const RECENT_LOG_LIMIT = 25;
+const ACTIVITY_LOG_LIMIT = 100;
+const USER_SUMMARY_DAYS = 30;
 
 export type AnalyticsEventType =
+  | "login"
   | "page_view"
   | "image_job_started"
   | "image_job_success"
@@ -28,6 +32,18 @@ export interface AnalyticsEvent {
 
 export interface DashboardLogEntry extends AnalyticsEvent {
   timestamp: string;
+  userId?: string;
+  userName?: string;
+}
+
+export interface UserActivitySummary {
+  userId: string;
+  userName: string;
+  logins: number;
+  filesSent: number;
+  conversionsSucceeded: number;
+  conversionsFailed: number;
+  lastSeen: string;
 }
 
 export interface DailyTrendPoint {
@@ -54,6 +70,9 @@ export interface DashboardStats {
   };
   trends: DailyTrendPoint[];
   recentLogs: DashboardLogEntry[];
+  // 사용자 탭: 최근 작업(페이지 조회 제외)과 최근 30일 사용자별 합계
+  activityLogs: DashboardLogEntry[];
+  users: UserActivitySummary[];
 }
 
 // BIGINT and COUNT(*) come back from pg as strings.
@@ -87,7 +106,19 @@ interface EventRow {
   optimized_size: string | null;
   page_count: number | null;
   error: string | null;
+  user_id: string | null;
+  user_name: string | null;
   created_at: Date;
+}
+
+interface UserSummaryRow {
+  user_id: string;
+  user_name: string | null;
+  logins: Counter;
+  files_sent: Counter;
+  conversions_succeeded: Counter;
+  conversions_failed: Counter;
+  last_seen: Date;
 }
 
 // Shared by the totals and daily-trend queries so both count events the same way.
@@ -170,6 +201,8 @@ function emptyStats(): DashboardStats {
     },
     trends: [],
     recentLogs: [],
+    activityLogs: [],
+    users: [],
   };
 }
 
@@ -188,23 +221,31 @@ function toLogEntry(row: EventRow): DashboardLogEntry {
   if (row.optimized_size !== null) entry.optimizedSize = toNumber(row.optimized_size);
   if (row.page_count !== null) entry.pageCount = row.page_count;
   if (row.error !== null) entry.error = row.error;
+  if (row.user_id !== null) entry.userId = row.user_id;
+  if (row.user_name !== null) entry.userName = row.user_name;
 
   return entry;
 }
 
+const EVENT_COLUMNS_SQL =
+  "type, visitor_id, status, tool, mode, filename, file_size, optimized_size, page_count, error, user_id, user_name, created_at";
+
 // Analytics is best-effort: a failed write is logged and swallowed so it never
 // fails the compression or capture request that triggered it.
-export async function trackAnalyticsEvent(event: AnalyticsEvent) {
+// 사용자는 브라우저가 보낸 값이 아니라 세션 쿠키에서 꺼낸다. 로그인 직후처럼 쿠키가
+// 아직 없을 때만 호출하는 쪽이 user를 넘긴다.
+export async function trackAnalyticsEvent(event: AnalyticsEvent, user?: SessionUser) {
   if (!db) return;
 
   try {
     const timestamp = resolveTimestamp(event.timestamp);
     const visitorId = optionalString(event.visitorId, 200);
+    const actor = user ?? (await getCurrentUser());
 
     await query(
       `INSERT INTO analytics_events
-        (type, visitor_id, status, tool, mode, filename, file_size, optimized_size, page_count, error, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::timestamptz, now()))`,
+        (type, visitor_id, status, tool, mode, filename, file_size, optimized_size, page_count, error, user_id, user_name, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13::timestamptz, now()))`,
       [
         event.type,
         visitorId,
@@ -216,6 +257,8 @@ export async function trackAnalyticsEvent(event: AnalyticsEvent) {
         optionalInteger(event.optimizedSize),
         optionalInteger(event.pageCount),
         optionalString(event.error, 2000),
+        actor?.uid ?? null,
+        actor?.name || null,
         timestamp,
       ],
     );
@@ -236,7 +279,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     return emptyStats();
   }
 
-  const [legacyTotals, eventTotals, visitors, trends, logs] = await Promise.all([
+  const [legacyTotals, eventTotals, visitors, trends, logs, activity, users] = await Promise.all([
     query<TotalsRow>("SELECT * FROM analytics_legacy_totals WHERE id"),
     query<TotalsRow>(
       `SELECT ${EVENT_COUNTERS_SQL},
@@ -247,11 +290,34 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     query<{ count: string }>("SELECT COUNT(*) AS count FROM analytics_visitors"),
     query<TrendRow>(TREND_SQL, [TREND_DAYS]),
     query<EventRow>(
-      `SELECT type, visitor_id, status, tool, mode, filename, file_size, optimized_size, page_count, error, created_at
+      `SELECT ${EVENT_COLUMNS_SQL}
        FROM analytics_events
        ORDER BY created_at DESC
        LIMIT $1`,
       [RECENT_LOG_LIMIT],
+    ),
+    query<EventRow>(
+      `SELECT ${EVENT_COLUMNS_SQL}
+       FROM analytics_events
+       WHERE user_id IS NOT NULL AND type <> 'page_view'
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [ACTIVITY_LOG_LIMIT],
+    ),
+    query<UserSummaryRow>(
+      `SELECT
+         user_id,
+         (array_agg(user_name ORDER BY created_at DESC))[1] AS user_name,
+         COUNT(*) FILTER (WHERE type = 'login') AS logins,
+         COUNT(*) FILTER (WHERE type IN ('image_job_started', 'pdf_job_started')) AS files_sent,
+         COUNT(*) FILTER (WHERE type IN ('image_job_success', 'pdf_job_success')) AS conversions_succeeded,
+         COUNT(*) FILTER (WHERE type IN ('image_job_error', 'pdf_job_error')) AS conversions_failed,
+         MAX(created_at) AS last_seen
+       FROM analytics_events
+       WHERE user_id IS NOT NULL AND created_at >= now() - make_interval(days => $1::int)
+       GROUP BY user_id
+       ORDER BY last_seen DESC`,
+      [USER_SUMMARY_DAYS],
     ),
   ]);
 
@@ -281,5 +347,15 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       pdfSuccess: toNumber(row.pdf_success),
     })),
     recentLogs: logs.rows.map(toLogEntry),
+    activityLogs: activity.rows.map(toLogEntry),
+    users: users.rows.map((row) => ({
+      userId: row.user_id,
+      userName: row.user_name ?? "",
+      logins: toNumber(row.logins),
+      filesSent: toNumber(row.files_sent),
+      conversionsSucceeded: toNumber(row.conversions_succeeded),
+      conversionsFailed: toNumber(row.conversions_failed),
+      lastSeen: row.last_seen.toISOString(),
+    })),
   };
 }

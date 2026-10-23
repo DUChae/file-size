@@ -6,6 +6,13 @@ import {
   getFeedbackStorageMode,
   getFeedbackSubmissions,
 } from "@/lib/feedback";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+
+// proxy.ts가 먼저 막지만, 목록과 삭제는 여기서도 관리자인지 확인한다.
+async function forbidUnlessAdmin() {
+  if (isAdmin(await getCurrentUser())) return null;
+  return NextResponse.json({ success: false, error: "권한이 없습니다." }, { status: 403 });
+}
 
 interface FeedbackPayload {
   type?: string;
@@ -18,6 +25,9 @@ interface FeedbackDeletePayload {
 }
 
 export async function GET() {
+  const forbidden = await forbidUnlessAdmin();
+  if (forbidden) return forbidden;
+
   try {
     const feedback = await getFeedbackSubmissions();
     return NextResponse.json({
@@ -72,12 +82,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const user = await getCurrentUser();
     const entry = {
       id: crypto.randomUUID(),
       type,
       title: title.slice(0, 120),
       details: details.slice(0, 4000),
       createdAt: new Date().toISOString(),
+      userId: user?.uid,
+      userName: user?.name,
     };
 
     await addFeedbackSubmission(entry);
@@ -99,6 +112,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const forbidden = await forbidUnlessAdmin();
+  if (forbidden) return forbidden;
+
   try {
     console.log("[feedback-api] delete request received");
     const payload = (await req.json()) as FeedbackDeletePayload;
