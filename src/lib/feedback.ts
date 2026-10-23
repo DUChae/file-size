@@ -9,6 +9,8 @@ export interface FeedbackSubmission {
   title: string;
   details: string;
   createdAt: string;
+  userId?: string;
+  userName?: string;
 }
 
 interface FeedbackRow {
@@ -16,6 +18,8 @@ interface FeedbackRow {
   type: "bug" | "improvement";
   title: string;
   details: string;
+  user_id: string | null;
+  user_name: string | null;
   created_at: Date;
 }
 
@@ -38,8 +42,16 @@ export async function addFeedbackSubmission(entry: FeedbackSubmission) {
   });
 
   await query(
-    "INSERT INTO feedback (id, type, title, details, created_at) VALUES ($1, $2, $3, $4, $5)",
-    [entry.id, entry.type, entry.title, entry.details, entry.createdAt],
+    "INSERT INTO feedback (id, type, title, details, user_id, user_name, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    [
+      entry.id,
+      entry.type,
+      entry.title,
+      entry.details,
+      entry.userId ?? null,
+      entry.userName || null,
+      entry.createdAt,
+    ],
   );
   console.log("[feedback] submission saved", { id: entry.id });
 }
@@ -72,7 +84,7 @@ export async function getFeedbackSubmissions(): Promise<FeedbackSubmission[]> {
 
   console.log("[feedback] loading submissions");
   const result = await query<FeedbackRow>(
-    "SELECT id, type, title, details, created_at FROM feedback ORDER BY created_at DESC LIMIT $1",
+    "SELECT id, type, title, details, user_id, user_name, created_at FROM feedback ORDER BY created_at DESC LIMIT $1",
     [MAX_FEEDBACK_ITEMS],
   );
   console.log("[feedback] submission count", { count: result.rows.length });
@@ -83,5 +95,7 @@ export async function getFeedbackSubmissions(): Promise<FeedbackSubmission[]> {
     title: row.title,
     details: row.details,
     createdAt: row.created_at.toISOString(),
+    ...(row.user_id !== null && { userId: row.user_id }),
+    ...(row.user_name !== null && { userName: row.user_name }),
   }));
 }

@@ -13,6 +13,8 @@ interface AppShellProps {
   activeTool?: ToolId;
   activeSection?: Section;
   busy?: Partial<Record<ToolId, number>>;
+  /** 대시보드 링크는 관리자에게만 보인다. */
+  showAdmin?: boolean;
   children: React.ReactNode;
 }
 
@@ -26,8 +28,11 @@ export function AppShell({
   activeTool,
   activeSection,
   busy,
+  showAdmin = false,
   children,
 }: AppShellProps) {
+  const links = SECONDARY_LINKS.filter((link) => link.id !== "admin" || showAdmin);
+
   return (
     <div className="flex min-h-dvh flex-col">
       <a
@@ -52,7 +57,7 @@ export function AppShell({
         />
         <nav aria-label="보조 메뉴" className="ml-auto shrink-0">
           <ul className="flex">
-            {SECONDARY_LINKS.map((link) => {
+            {links.map((link) => {
               const active = link.id === activeSection;
               return (
                 <li key={link.id}>

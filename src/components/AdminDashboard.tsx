@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { CheckCircle2, ChevronDown, Trash2, XCircle } from "lucide-react";
-import { DashboardStats } from "@/lib/analytics";
+import { DashboardLogEntry, DashboardStats } from "@/lib/analytics";
 import { FeedbackSubmission } from "@/lib/feedback";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { formatSize } from "@/lib/format";
 
 type RangeKey = "7d" | "30d" | "365d";
-type AdminTab = "analytics" | "feedback";
+type AdminTab = "analytics" | "users" | "feedback";
 
 // 차트 색: 중립 + 노랑 + 상태색(성공·실패). 상태색은 아이콘·라벨과 함께만 쓴다.
 const CHART = {
@@ -61,6 +61,35 @@ function formatTimestamp(value: string) {
   } catch {
     return value;
   }
+}
+
+function formatUser(userId?: string, userName?: string) {
+  if (!userId) return "알 수 없음";
+  return userName ? `${userName} (${userId})` : userId;
+}
+
+function toolLabel(tool: DashboardLogEntry["tool"]) {
+  if (tool === "pdf") return "PDF";
+  if (tool === "url_capture") return "캡처";
+  if (tool === "image") return "이미지";
+  return "—";
+}
+
+function actionLabel(type: DashboardLogEntry["type"]) {
+  if (type === "login") return "접속";
+  if (type.endsWith("_started")) return "시작";
+  if (type.endsWith("_success")) return "완료";
+  if (type.endsWith("_error")) return "실패";
+  return type;
+}
+
+function activityResult(log: DashboardLogEntry) {
+  if (log.type.endsWith("_error")) return log.error ?? "원인 기록 없음";
+  if (log.fileSize !== undefined && log.optimizedSize !== undefined) {
+    return `${formatSize(log.fileSize)} → ${formatSize(log.optimizedSize)}`;
+  }
+  if (log.pageCount !== undefined) return `${log.pageCount}쪽`;
+  return "";
 }
 
 function compactDateLabel(value: string) {
@@ -462,11 +491,14 @@ export default function AdminDashboard({
             <p className="mt-1 text-sm text-muted">
               {activeTab === "analytics"
                 ? `사용량과 실패 원인 · ${rangeLabel}`
-                : `사용자 피드백 ${feedbackItems.length}건`}
+                : activeTab === "users"
+                  ? `최근 30일 사용자 ${dashboard.users.length}명`
+                  : `사용자 피드백 ${feedbackItems.length}건`}
             </p>
           </div>
           <TabsList>
             <TabsTrigger value="analytics">통계</TabsTrigger>
+            <TabsTrigger value="users">사용자</TabsTrigger>
             <TabsTrigger value="feedback">피드백</TabsTrigger>
           </TabsList>
         </div>
@@ -792,17 +824,138 @@ export default function AdminDashboard({
                           {formatTimestamp(log.timestamp)}
                         </td>
                         <td className="py-3 pr-4">
-                          {log.tool === "pdf"
-                            ? "PDF"
-                            : log.tool === "url_capture"
-                              ? "캡처"
-                              : "이미지"}
+                          {log.tool ? toolLabel(log.tool) : "이미지"}
                         </td>
                         <td className="max-w-[16rem] break-all py-3 pr-4">
                           {log.filename ?? "이름 없음"}
                         </td>
                         <td className="py-3 text-danger">
                           {log.error ?? "원인 기록 없음"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="users" className="mt-0 space-y-6">
+          <section className="rounded-tile border border-line bg-surface p-5">
+            <h2 className="text-base font-bold">사용자별 합계</h2>
+            <p className="mb-3 text-xs text-muted">
+              최근 30일 동안 그룹웨어로 접속한 사람과 작업 수입니다.
+            </p>
+            {dashboard.users.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted">
+                아직 그룹웨어로 접속한 기록이 없습니다
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[40rem] text-sm">
+                  <thead className="text-left text-xs text-muted">
+                    <tr className="border-b border-line">
+                      <th className="py-2 pr-4 font-semibold">사용자</th>
+                      <th className="py-2 pr-4 text-right font-semibold">접속</th>
+                      <th className="py-2 pr-4 text-right font-semibold">보낸 파일</th>
+                      <th className="py-2 pr-4 text-right font-semibold">성공</th>
+                      <th className="py-2 pr-4 text-right font-semibold">실패</th>
+                      <th className="py-2 font-semibold">마지막 활동</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {dashboard.users.map((user) => (
+                      <tr key={user.userId}>
+                        <td className="py-2.5 pr-4 font-semibold">
+                          {formatUser(user.userId, user.userName)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          {formatCount(user.logins)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          {formatCount(user.filesSent)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          {formatCount(user.conversionsSucceeded)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          {formatCount(user.conversionsFailed)}
+                        </td>
+                        <td className="whitespace-nowrap py-2.5 text-muted">
+                          {formatTimestamp(user.lastSeen)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-tile border border-line bg-surface p-5">
+            <h2 className="flex items-baseline gap-1.5 text-base font-bold">
+              최근 작업 기록
+              <span className="font-medium text-muted">
+                ({dashboard.activityLogs.length})
+              </span>
+            </h2>
+            <p className="mb-3 text-xs text-muted">
+              누가 언제 어떤 파일로 무슨 작업을 했는지 최신순으로 보여 줍니다.
+              페이지 이동은 빼고 최근 100건까지 보입니다.
+            </p>
+            {dashboard.activityLogs.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted">
+                아직 기록된 작업이 없습니다
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[48rem] text-sm">
+                  <thead className="text-left text-xs text-muted">
+                    <tr className="border-b border-line">
+                      <th className="py-2 pr-4 font-semibold">시각</th>
+                      <th className="py-2 pr-4 font-semibold">사용자</th>
+                      <th className="py-2 pr-4 font-semibold">작업</th>
+                      <th className="py-2 pr-4 font-semibold">도구</th>
+                      <th className="py-2 pr-4 font-semibold">파일</th>
+                      <th className="py-2 font-semibold">결과</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {dashboard.activityLogs.map((log, index) => (
+                      <tr
+                        key={`${log.timestamp}-${index}`}
+                        className="align-top"
+                      >
+                        <td className="whitespace-nowrap py-2.5 pr-4 text-muted">
+                          {formatTimestamp(log.timestamp)}
+                        </td>
+                        <td className="whitespace-nowrap py-2.5 pr-4">
+                          {formatUser(log.userId, log.userName)}
+                        </td>
+                        <td
+                          className={cn(
+                            "whitespace-nowrap py-2.5 pr-4",
+                            log.type.endsWith("_error") && "text-danger",
+                          )}
+                        >
+                          {actionLabel(log.type)}
+                        </td>
+                        <td className="whitespace-nowrap py-2.5 pr-4">
+                          {toolLabel(log.tool)}
+                        </td>
+                        <td className="max-w-[16rem] break-all py-2.5 pr-4">
+                          {log.filename ?? ""}
+                        </td>
+                        <td
+                          className={cn(
+                            "py-2.5",
+                            log.type.endsWith("_error")
+                              ? "text-danger"
+                              : "text-muted",
+                          )}
+                        >
+                          {activityResult(log)}
                         </td>
                       </tr>
                     ))}
@@ -844,6 +997,11 @@ export default function AdminDashboard({
                     <p className="text-xs text-muted">
                       {formatTimestamp(entry.createdAt)}
                     </p>
+                    {entry.userId && (
+                      <p className="text-xs text-muted">
+                        {formatUser(entry.userId, entry.userName)}
+                      </p>
+                    )}
                   </div>
                   <div className="min-w-0 space-y-1">
                     <h3 className="break-words text-base font-semibold">
