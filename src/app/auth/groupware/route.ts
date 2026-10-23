@@ -27,7 +27,7 @@ function safeNextPath(value: string | null) {
 
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
-  const result = verifyGroupwareLink(params);
+  const result = verifyGroupwareLink(req.nextUrl.search);
 
   if (!result.ok) {
     console.warn("[auth] groupware link rejected", { reason: result.reason });
