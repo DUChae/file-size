@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, isAdmin, readSessionToken } from "@/lib/auth";
 
 // 그룹웨어 링크로 받은 세션 쿠키가 없으면 페이지는 안내 화면을, API는 401을 돌려준다.
-// 대시보드와 피드백 목록·삭제는 관리자(ADMIN_USER_IDS)만 쓴다. 각 라우트에서도 한 번 더 확인한다.
+// 대시보드와 피드백 목록·삭제는 관리자(그룹웨어 mtype A)만 쓴다. 각 라우트에서도 한 번 더 확인한다.
 
 function isAdminPath(req: NextRequest) {
   const { pathname } = req.nextUrl;

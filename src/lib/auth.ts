@@ -10,10 +10,13 @@ export const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const LINK_MAX_AGE_SECONDS = 120;
 const MIN_SECRET_LENGTH = 32;
 const MAX_FIELD_LENGTH = 100;
+// 그룹웨어 계정 종류(wo_member.mtype). A가 그룹웨어 관리자이고, 이 앱에서도 관리자로 본다.
+const ADMIN_TYPE = "A";
 
 export interface SessionUser {
   uid: string;
   name: string;
+  type: string;
 }
 
 interface SessionPayload extends SessionUser {
@@ -53,17 +56,18 @@ export function verifyGroupwareLink(params: URLSearchParams): LinkVerifyResult {
 
   const uid = params.get("uid") ?? "";
   const name = params.get("name") ?? "";
+  const type = params.get("type") ?? "";
   const ts = params.get("ts") ?? "";
   const sig = params.get("sig") ?? "";
 
-  if (!isCleanField(uid, false) || !isCleanField(name, true)) {
+  if (!isCleanField(uid, false) || !isCleanField(name, true) || !isCleanField(type, true)) {
     return { ok: false, reason: "invalid" };
   }
   if (!/^\d{1,12}$/.test(ts) || !/^[0-9a-f]{64}$/i.test(sig)) {
     return { ok: false, reason: "invalid" };
   }
 
-  const expected = hmac(secret, `${uid}\n${name}\n${ts}`);
+  const expected = hmac(secret, `${uid}\n${name}\n${type}\n${ts}`);
   if (!safeEqual(expected, Buffer.from(sig, "hex"))) {
     return { ok: false, reason: "invalid" };
   }
@@ -73,7 +77,7 @@ export function verifyGroupwareLink(params: URLSearchParams): LinkVerifyResult {
     return { ok: false, reason: "expired" };
   }
 
-  return { ok: true, user: { uid, name } };
+  return { ok: true, user: { uid, name, type } };
 }
 
 export function createSessionToken(user: SessionUser) {
@@ -100,21 +104,22 @@ export function readSessionToken(token: string | undefined): SessionUser | null 
 
   try {
     const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as SessionPayload;
-    if (typeof payload.uid !== "string" || typeof payload.name !== "string") return null;
+    if (
+      typeof payload.uid !== "string" ||
+      typeof payload.name !== "string" ||
+      typeof payload.type !== "string"
+    ) {
+      return null;
+    }
     if (typeof payload.exp !== "number" || payload.exp < Date.now() / 1000) return null;
-    return { uid: payload.uid, name: payload.name };
+    return { uid: payload.uid, name: payload.name, type: payload.type };
   } catch {
     return null;
   }
 }
 
 export function isAdmin(user: SessionUser | null) {
-  if (!user) return false;
-  const admins = (process.env.ADMIN_USER_IDS ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-  return admins.includes(user.uid);
+  return user?.type === ADMIN_TYPE;
 }
 
 // 라우트 핸들러와 서버 컴포넌트에서 쓴다. 요청 밖에서 불리면 사용자를 모르는 것으로 본다.

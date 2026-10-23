@@ -30,7 +30,6 @@ services:
       # 그룹웨어 링크 인증. 두 비밀키가 없으면 모든 접속이 막힌다(scripts/groupware-link.mjs 참고).
       GROUPWARE_SSO_SECRET: ${GROUPWARE_SSO_SECRET:?GROUPWARE_SSO_SECRET is required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
-      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
       GROUPWARE_URL: ${GROUPWARE_URL:-}
     volumes:
       - captures:/data
