@@ -48,25 +48,76 @@ function isCleanField(value: string, allowEmpty: boolean) {
   return value.length <= MAX_FIELD_LENGTH && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-export function verifyGroupwareLink(params: URLSearchParams): LinkVerifyResult {
+// 그룹웨어(PHP)는 세션 값을 바이트 그대로 서명하고 퍼센트 인코딩한다. 이름이 EUC-KR이면
+// URLSearchParams가 UTF-8로 풀면서 글자가 깨져 서명이 어긋나므로, 쿼리를 바이트로 직접 푼다.
+function parseRawQuery(search: string) {
+  const fields = new Map<string, Buffer>();
+  for (const part of search.replace(/^\?/, "").split("&")) {
+    if (!part) continue;
+    const eq = part.indexOf("=");
+    const key = eq < 0 ? part : part.slice(0, eq);
+    const value = eq < 0 ? "" : part.slice(eq + 1);
+    if (!fields.has(key)) fields.set(key, percentDecodeBytes(value));
+  }
+  return fields;
+}
+
+function percentDecodeBytes(value: string) {
+  const bytes: number[] = [];
+  const raw = Buffer.from(value.replace(/\+/g, " "), "utf8");
+  for (let i = 0; i < raw.length; i++) {
+    const hex = raw[i] === 0x25 ? raw.subarray(i + 1, i + 3).toString("latin1") : "";
+    if (/^[0-9a-f]{2}$/i.test(hex)) {
+      bytes.push(parseInt(hex, 16));
+      i += 2;
+    } else {
+      bytes.push(raw[i]);
+    }
+  }
+  return Buffer.from(bytes);
+}
+
+// UTF-8이 아니면 그룹웨어의 옛 인코딩(EUC-KR)으로 읽는다.
+function decodeText(bytes: Buffer) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("euc-kr").decode(bytes);
+  }
+}
+
+export function verifyGroupwareLink(search: string): LinkVerifyResult {
   const secret = readSecret("GROUPWARE_SSO_SECRET");
   if (!secret) return { ok: false, reason: "misconfigured" };
 
-  const uid = params.get("uid") ?? "";
-  const name = params.get("name") ?? "";
-  const type = params.get("type") ?? "";
-  const ts = params.get("ts") ?? "";
-  const sig = params.get("sig") ?? "";
+  const fields = parseRawQuery(search);
+  const bytes = (key: string) => fields.get(key) ?? Buffer.alloc(0);
+  const uid = decodeText(bytes("uid"));
+  const name = decodeText(bytes("name"));
+  const type = decodeText(bytes("type"));
+  const ts = bytes("ts").toString("latin1");
+  const sig = bytes("sig").toString("latin1");
 
   if (!isCleanField(uid, false) || !isCleanField(name, true) || !isCleanField(type, true)) {
+    console.warn("[auth] groupware link has a malformed field", { uid });
     return { ok: false, reason: "invalid" };
   }
   if (!/^\d{1,12}$/.test(ts) || !/^[0-9a-f]{64}$/i.test(sig)) {
+    console.warn("[auth] groupware link has a malformed ts or sig", { uid });
     return { ok: false, reason: "invalid" };
   }
 
-  const expected = hmac(secret, `${uid}\n${name}\n${type}\n${ts}`);
+  const newline = Buffer.from("\n");
+  const message = Buffer.concat([
+    bytes("uid"), newline, bytes("name"), newline, bytes("type"), newline, Buffer.from(ts),
+  ]);
+  const expected = createHmac("sha256", secret).update(message).digest();
   if (!safeEqual(expected, Buffer.from(sig, "hex"))) {
+    // 모든 사람이 이 로그로 막히면 그룹웨어와 서버의 GROUPWARE_SSO_SECRET이 다른 것이다.
+    console.warn("[auth] groupware link signature mismatch", {
+      uid,
+      nameIsUtf8: name === bytes("name").toString("utf8"),
+    });
     return { ok: false, reason: "invalid" };
   }
 
