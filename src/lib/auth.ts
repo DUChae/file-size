@@ -10,8 +10,6 @@ export const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const LINK_MAX_AGE_SECONDS = 120;
 const MIN_SECRET_LENGTH = 32;
 const MAX_FIELD_LENGTH = 100;
-// 그룹웨어 계정 종류(wo_member.mtype). A가 그룹웨어 관리자이고, 이 앱에서도 관리자로 본다.
-const ADMIN_TYPE = "A";
 
 export interface SessionUser {
   uid: string;
@@ -116,10 +114,6 @@ export function readSessionToken(token: string | undefined): SessionUser | null 
   } catch {
     return null;
   }
-}
-
-export function isAdmin(user: SessionUser | null) {
-  return user?.type === ADMIN_TYPE;
 }
 
 // 라우트 핸들러와 서버 컴포넌트에서 쓴다. 요청 밖에서 불리면 사용자를 모르는 것으로 본다.

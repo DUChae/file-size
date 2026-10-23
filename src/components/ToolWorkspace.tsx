@@ -79,10 +79,8 @@ function ToolPanel({
  * 결과 blob URL은 각 도구가 삭제·비우기·언마운트 때 해제하므로, 이 틀이 사라질 때(사이트를 떠날 때) 함께 정리된다.
  */
 export default function ToolWorkspace({
-  showAdmin,
   children,
 }: {
-  showAdmin: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -155,7 +153,6 @@ export default function ToolWorkspace({
       activeTool={activeTool}
       activeSection={section}
       busy={toolBusy}
-      showAdmin={showAdmin}
     >
       {visited.map((key) => (
         <ToolPanel
