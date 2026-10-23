@@ -234,6 +234,10 @@ async function encodeToTargetSize(
 }
 
 export async function POST(req: NextRequest) {
+  // 실패 기록에도 어떤 파일의 어떤 작업이었는지 남기려고 try 밖에 둔다.
+  let jobFilename: string | undefined;
+  let jobMode: string | undefined;
+
   try {
     let form: FormData;
     try {
@@ -253,6 +257,7 @@ export async function POST(req: NextRequest) {
       webY,
       ...options
     } = parseOptions(form.get("options"));
+    jobFilename = filename;
     const quality = parseRangedInteger(options.quality, "Quality", 1, 100);
     const scalePercent = parseRangedInteger(
       options.scalePercent,
@@ -268,8 +273,11 @@ export async function POST(req: NextRequest) {
     );
     const stripMetadata = options.stripMetadata !== false;
     const isCustomQuality = quality !== undefined || targetBytes !== undefined;
-    const analyticsMode =
-      targetBytes !== undefined ? "target" : isCustomQuality ? "custom" : category;
+    // 압축 설정과 출력 형식을 함께 남긴다. 예: "custom:webp", "target:original"
+    const analyticsMode = `${
+      targetBytes !== undefined ? "target" : isCustomQuality ? "custom" : category
+    }:${targetFormat}`;
+    jobMode = analyticsMode;
 
     await trackAnalyticsEvent({
       type: "image_job_started",
@@ -570,6 +578,8 @@ export async function POST(req: NextRequest) {
       type: "image_job_error",
       status: "error",
       tool: "image",
+      mode: jobMode,
+      filename: jobFilename,
       error: error instanceof Error ? error.message : "Internal server error",
     });
 

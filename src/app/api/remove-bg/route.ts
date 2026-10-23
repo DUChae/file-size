@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 import { Client } from "@gradio/client";
 import sharp from "sharp";
 
@@ -129,6 +130,8 @@ async function trySmartUniformBgRemoval(imageBuffer: Buffer): Promise<Buffer | n
 }
 
 export async function POST(req: NextRequest) {
+  let jobFilename: string | undefined;
+
   try {
     const apiKey = process.env.HUGGINGFACE_API_KEY?.trim();
     if (!apiKey) {
@@ -152,6 +155,7 @@ export async function POST(req: NextRequest) {
         );
       }
       mimeType = file.type || "image/png";
+      jobFilename = file.name || undefined;
       imageBuffer = await file.arrayBuffer();
     } else {
       imageBuffer = await req.arrayBuffer();
@@ -163,6 +167,15 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    await trackAnalyticsEvent({
+      type: "image_job_started",
+      status: "started",
+      tool: "remove_bg",
+      filename: jobFilename,
+      fileSize: imageBuffer.byteLength,
+    });
+    const originalSize = imageBuffer.byteLength;
 
     let nodeBuffer: Buffer = Buffer.from(imageBuffer);
 
@@ -180,6 +193,15 @@ export async function POST(req: NextRequest) {
     // 1단계: 로고/단색 배경 이미지 스마트 고속 분리 (문체부 로고 등 그래픽 이미지 초고속 100% 성공 보장)
     const smartResult = await trySmartUniformBgRemoval(nodeBuffer);
     if (smartResult) {
+      await trackAnalyticsEvent({
+        type: "image_job_success",
+        status: "success",
+        tool: "remove_bg",
+        mode: "smart-uniform",
+        filename: jobFilename,
+        fileSize: originalSize,
+        optimizedSize: smartResult.length,
+      });
       return new Response(new Uint8Array(smartResult), {
         status: 200,
         headers: {
@@ -241,6 +263,16 @@ export async function POST(req: NextRequest) {
 
     const pngBuffer = await downloadRes.arrayBuffer();
 
+    await trackAnalyticsEvent({
+      type: "image_job_success",
+      status: "success",
+      tool: "remove_bg",
+      mode: "birefnet",
+      filename: jobFilename,
+      fileSize: originalSize,
+      optimizedSize: pngBuffer.byteLength,
+    });
+
     return new Response(pngBuffer, {
       status: 200,
       headers: {
@@ -252,6 +284,13 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     cachedClient = null; // 오류 발생 시 클라이언트 재연결을 위해 캐시 초기화
     console.error("remove-bg error:", error);
+    await trackAnalyticsEvent({
+      type: "image_job_error",
+      status: "error",
+      tool: "remove_bg",
+      filename: jobFilename,
+      error: error instanceof Error ? error.message : "배경 제거 처리 중 서버 오류",
+    });
     return NextResponse.json(
       {
         error:

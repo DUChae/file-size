@@ -20,7 +20,7 @@ export interface AnalyticsEvent {
   type: AnalyticsEventType;
   visitorId?: string;
   status?: "started" | "success" | "error";
-  tool?: "image" | "pdf" | "url_capture";
+  tool?: "image" | "pdf" | "url_capture" | "remove_bg";
   mode?: string;
   filename?: string;
   fileSize?: number;
