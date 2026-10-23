@@ -72,11 +72,29 @@ function toolLabel(tool: DashboardLogEntry["tool"]) {
   if (tool === "pdf") return "PDF";
   if (tool === "url_capture") return "캡처";
   if (tool === "image") return "이미지";
+  if (tool === "remove_bg") return "배경 제거";
   return "—";
 }
 
+// 도구와 mode로 사람이 읽을 작업 이름을 만든다. 이미지 mode는 "설정:출력형식"이다.
+function jobLabel(log: DashboardLogEntry) {
+  if (log.type === "login") return "그룹웨어 접속";
+  if (log.tool === "remove_bg") return "배경 제거";
+  if (log.tool === "url_capture") return "웹페이지 캡처";
+  if (log.tool === "pdf") {
+    if (log.mode?.startsWith("compress")) return "PDF 압축";
+    if (log.mode?.startsWith("image-to-pdf")) return "이미지 → PDF";
+    if (log.mode === "pdf-to-png") return "PDF → PNG";
+    return "PDF";
+  }
+  const format = log.mode?.split(":")[1];
+  if (!format || format === "original") return "이미지 압축";
+  const names: Record<string, string> = { jpeg: "JPG", webp: "WebP" };
+  return `${names[format] ?? format.toUpperCase()} 변환`;
+}
+
 function actionLabel(type: DashboardLogEntry["type"]) {
-  if (type === "login") return "접속";
+  if (type === "login") return "—";
   if (type.endsWith("_started")) return "시작";
   if (type.endsWith("_success")) return "완료";
   if (type.endsWith("_error")) return "실패";
@@ -916,7 +934,7 @@ export default function AdminDashboard({
                       <th className="py-2 pr-4 font-semibold">시각</th>
                       <th className="py-2 pr-4 font-semibold">사용자</th>
                       <th className="py-2 pr-4 font-semibold">작업</th>
-                      <th className="py-2 pr-4 font-semibold">도구</th>
+                      <th className="py-2 pr-4 font-semibold">상태</th>
                       <th className="py-2 pr-4 font-semibold">파일</th>
                       <th className="py-2 font-semibold">결과</th>
                     </tr>
@@ -933,6 +951,9 @@ export default function AdminDashboard({
                         <td className="whitespace-nowrap py-2.5 pr-4">
                           {formatUser(log.userId, log.userName)}
                         </td>
+                        <td className="whitespace-nowrap py-2.5 pr-4">
+                          {jobLabel(log)}
+                        </td>
                         <td
                           className={cn(
                             "whitespace-nowrap py-2.5 pr-4",
@@ -940,9 +961,6 @@ export default function AdminDashboard({
                           )}
                         >
                           {actionLabel(log.type)}
-                        </td>
-                        <td className="whitespace-nowrap py-2.5 pr-4">
-                          {toolLabel(log.tool)}
                         </td>
                         <td className="max-w-[16rem] break-all py-2.5 pr-4">
                           {log.filename ?? ""}

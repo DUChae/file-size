@@ -124,6 +124,7 @@ export default function PdfToPngConverter() {
       type: "pdf_job_started",
       status: "started",
       tool: "pdf",
+      mode: "pdf-to-png",
       filename: file.name,
       fileSize: file.size,
     });
@@ -185,6 +186,7 @@ export default function PdfToPngConverter() {
         type: "pdf_job_success",
         status: "success",
         tool: "pdf",
+        mode: "pdf-to-png",
         filename: file.name,
         fileSize: file.size,
         pageCount: pdf.numPages,
@@ -202,6 +204,7 @@ export default function PdfToPngConverter() {
         type: "pdf_job_error",
         status: "error",
         tool: "pdf",
+        mode: "pdf-to-png",
         filename: file.name,
         fileSize: file.size,
         error: message,
