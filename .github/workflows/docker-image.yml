@@ -1,0 +1,44 @@
+# 서버에서 next build를 돌리면 메모리가 모자라 같은 서버의 다른 서비스까지 멈춘다.
+# 이미지는 여기서 만들어 GHCR에 올리고, 서버(scripts/deploy.sh)는 받아서 실행만 한다.
+name: docker-image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # deploy.sh는 서버의 `git rev-parse HEAD`로 태그를 찾으므로 커밋 SHA 전체를 태그로 쓴다.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/duchae/file-size:${{ github.sha }}
+            ghcr.io/duchae/file-size:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
