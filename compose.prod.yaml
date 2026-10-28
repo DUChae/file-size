@@ -20,8 +20,8 @@ services:
     # No host port: 127.0.0.1:5432 is already taken by honey-prod-db.
 
   app:
-    build: .
-    image: file-size:${IMAGE_TAG:-local}   # deploy.sh tags each build with the commit SHA, so old images stay available for rollback
+    # Built by GitHub Actions (.github/workflows/docker-image.yml), never on this server: the build ran it out of memory.
+    image: ghcr.io/duchae/file-size:${IMAGE_TAG:-local}   # tagged with the full commit SHA, so old images stay available for rollback
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-file_size}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-file_size}
