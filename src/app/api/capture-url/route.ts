@@ -13,6 +13,14 @@ const MINUTE_LIMIT = 20;
 const DAY_LIMIT = 50;
 const minuteRequests = new Map<string, { count: number; resetAt: number }>();
 const dailyRequests = new Map<string, { count: number; date: string }>();
+const SWEEP_INTERVAL_MS = 60 * 1000;
+let lastSweepAt = 0;
+
+// iframe 래퍼 감지용 요청이 느리거나 끝없는 응답을 보내는 서버에 매달리지 않게 한다.
+// 래퍼 판정은 문자 수 10000 미만이므로, 한글(UTF-8 3바이트)을 감안해 바이트는 그 3배까지 읽는다.
+const PROBE_TIMEOUT_MS = 5000;
+const PROBE_MAX_CHARS = 10000;
+const PROBE_MAX_BYTES = PROBE_MAX_CHARS * 3;
 
 function getClientIp(request: NextRequest) {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -23,8 +31,22 @@ function getClientIp(request: NextRequest) {
   return request.headers.get("x-real-ip") || "unknown";
 }
 
+// 한 번 온 IP의 항목이 계속 남지 않도록 만료된 항목을 1분에 한 번 지운다.
+function sweepExpiredBuckets(now: number, today: string) {
+  if (now - lastSweepAt < SWEEP_INTERVAL_MS) return;
+  lastSweepAt = now;
+
+  for (const [ip, bucket] of minuteRequests) {
+    if (bucket.resetAt <= now) minuteRequests.delete(ip);
+  }
+  for (const [ip, bucket] of dailyRequests) {
+    if (bucket.date !== today) dailyRequests.delete(ip);
+  }
+}
+
 function checkRateLimit(ip: string) {
   const now = Date.now();
+  sweepExpiredBuckets(now, new Date().toISOString().slice(0, 10));
   const minuteBucket = minuteRequests.get(ip);
   if (!minuteBucket || minuteBucket.resetAt <= now) {
     minuteRequests.set(ip, { count: 1, resetAt: now + 60 * 1000 });
@@ -190,6 +212,27 @@ async function fetchScreenshotWithProtocolFallback(accessKey: string, captureUrl
   }
 }
 
+// 본문이 한도를 넘으면 null. 래퍼 페이지가 아니라는 뜻이므로 호출하는 쪽은 원래 URL을 쓴다.
+async function readProbeHtml(response: Response) {
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > PROBE_MAX_BYTES) return null;
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 export async function POST(request: NextRequest) {
   // Fire-and-forget: the response does not wait for old captures to be removed.
   cleanupExpiredCaptures().catch((error) => {
@@ -213,10 +256,11 @@ export async function POST(request: NextRequest) {
       const probeResponse = await fetch(targetUrl.href, {
         cache: "no-store",
         redirect: "manual",
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       });
-      const html = await probeResponse.text();
+      const html = await readProbeHtml(probeResponse);
       // If it's a small wrapper page with an iframe, target the iframe source instead
-      if (html.length < 10000 && html.includes("<iframe")) {
+      if (html !== null && html.length < PROBE_MAX_CHARS && html.includes("<iframe")) {
         const iframeMatch = html.match(/id="contentFrame"\s+src="([^"]+)"/) || 
                            html.match(/<iframe[^>]+src="([^"]+)"/);
         if (iframeMatch && iframeMatch[1]) {
