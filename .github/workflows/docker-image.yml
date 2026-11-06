@@ -12,7 +12,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 린트나 타입 검사가 깨진 커밋은 이미지로 만들지 않는다. 서버는 이 이미지를 받아 실행만 한다.
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npx next typegen
+
+      - run: npx tsc --noEmit
+
   build:
+    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: read
