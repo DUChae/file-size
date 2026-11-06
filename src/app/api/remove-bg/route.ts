@@ -5,7 +5,7 @@ import sharp from "sharp";
 
 export const maxDuration = 60; // Vercel 함수 최대 실행 시간
 
-let cachedClient: any = null;
+let cachedClient: Client | null = null;
 
 async function getBiRefNetClient(token: string) {
   if (!cachedClient) {
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2단계: 복합 배경/실사 이미지에 대한 BiRefNet SOTA AI 추론 (재시도 및 연결 유실 복구 지원)
-    let client: any;
+    let client: Client;
     try {
       client = await getBiRefNetClient(apiKey);
     } catch {
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
 
     const inputBlob = new Blob([imageBuffer], { type: mimeType });
 
-    let result: any = null;
+    let result: Awaited<ReturnType<Client["predict"]>> | null = null;
     try {
       result = await client.predict("/image", [
         inputBlob,
