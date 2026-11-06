@@ -57,6 +57,10 @@ export interface CompressionOptions {
   quality?: number;
   // 10-100. Resizes by percent of the (EXIF-rotated) source width, keeping aspect ratio.
   scalePercent?: number;
+  // 1-16383 px. Fits the (EXIF-rotated) source inside this box, keeping aspect ratio and never enlarging.
+  // Either one may be omitted; the other side then decides.
+  maxWidth?: number;
+  maxHeight?: number;
   // Bytes. When present, `quality` is ignored and the highest quality that fits is used.
   targetBytes?: number;
   // Defaults to true. false keeps EXIF/XMP/IPTC (orientation is still normalized).

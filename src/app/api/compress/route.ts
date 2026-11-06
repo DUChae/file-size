@@ -14,6 +14,9 @@ class RequestError extends Error {
   }
 }
 
+// sharp가 받는 한 변의 최대 픽셀 수
+const MAX_OUTPUT_DIMENSION = 16383;
+
 function parseOptions(value: FormDataEntryValue | null): CompressionOptions {
   if (typeof value !== "string") {
     throw new RequestError("Missing compression options.", 400);
@@ -266,6 +269,18 @@ export async function POST(req: NextRequest) {
       10,
       100,
     );
+    const maxWidth = parseRangedInteger(
+      options.maxWidth,
+      "Max width",
+      1,
+      MAX_OUTPUT_DIMENSION,
+    );
+    const maxHeight = parseRangedInteger(
+      options.maxHeight,
+      "Max height",
+      1,
+      MAX_OUTPUT_DIMENSION,
+    );
     const targetBytes = parseRangedInteger(
       options.targetBytes,
       "Target size",
@@ -360,7 +375,13 @@ export async function POST(req: NextRequest) {
     if (isCustomQuality) {
       // User-controlled mode: keep the original resolution unless a scale is requested.
       resizeWidth = undefined;
-      if (scalePercent !== undefined && scalePercent < 100) {
+      if (maxWidth !== undefined || maxHeight !== undefined) {
+        // 가로·세로 중 하나만 주면 나머지는 비율대로 정해진다. sharp는 회전을 반영한 크기에 적용한다.
+        sharpInstance = sharpInstance.resize(maxWidth, maxHeight, {
+          fit: "inside",
+          withoutEnlargement: true,
+        });
+      } else if (scalePercent !== undefined && scalePercent < 100) {
         // metadata reports pre-rotation dimensions; EXIF orientations 5-8 swap width/height.
         const rotatedWidth =
           (metadata.orientation ?? 1) >= 5 ? metadata.height : metadata.width;

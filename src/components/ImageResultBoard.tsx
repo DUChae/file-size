@@ -66,12 +66,32 @@ function mayHaveAlpha(item: QueueItem) {
   return ["png", "webp", "avif", "gif"].includes(format);
 }
 
+/** 사용자 정의 크기 상자. 비어 있는 쪽은 자동이다. */
+export interface ResizeBox {
+  width?: number;
+  height?: number;
+}
+
 function scaledSize(item: QueueItem, percent: number) {
   if (!item.width || !item.height) return null;
   const width = Math.max(1, Math.round((item.width * percent) / 100));
   return {
     width,
     height: Math.max(1, Math.round((item.height * width) / item.width)),
+  };
+}
+
+// 가로·세로 상자 안에 비율을 유지하며 맞추되 원본보다 키우지 않는다. 서버(fit: inside)와 같은 규칙이다.
+function fittedSize(item: QueueItem, box: ResizeBox) {
+  if (!item.width || !item.height) return null;
+  const ratio = Math.min(
+    box.width ? box.width / item.width : Infinity,
+    box.height ? box.height / item.height : Infinity,
+    1,
+  );
+  return {
+    width: Math.max(1, Math.round(item.width * ratio)),
+    height: Math.max(1, Math.round(item.height * ratio)),
   };
 }
 
@@ -110,6 +130,8 @@ interface BoardProps {
   verb: string;
   resizeEnabled: boolean;
   globalScale: number;
+  /** 사용자 정의 크기를 쓰는 중이면 그 상자, 아니면 null */
+  customBox: ResizeBox | null;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
   onCompare: (id: string) => void;
@@ -218,6 +240,7 @@ function QueuedFocus({
   isRunning,
   resizeEnabled,
   globalScale,
+  customBox,
   onRemove,
   onCustomScale,
 }: {
@@ -225,12 +248,20 @@ function QueuedFocus({
   isRunning: boolean;
   resizeEnabled: boolean;
   globalScale: number;
+  customBox: ResizeBox | null;
   onRemove: () => void;
   onCustomScale: (value: number | undefined) => void;
 }) {
   const name = item.originalFile.name;
   const scale = resizeEnabled ? (item.customScale ?? globalScale) : 100;
-  const target = scaledSize(item, scale);
+  const target = customBox
+    ? fittedSize(item, customBox)
+    : scaledSize(item, scale);
+  const resized =
+    target !== null &&
+    (customBox
+      ? target.width !== item.width || target.height !== item.height
+      : scale < 100);
 
   return (
     <FocusTile
@@ -248,13 +279,13 @@ function QueuedFocus({
         {
           label: "결과 해상도",
           value:
-            target && scale < 100
+            target && resized
               ? `${target.width} × ${target.height}`
               : "원본 유지",
         },
       ]}
       extra={
-        resizeEnabled ? (
+        resizeEnabled && !customBox ? (
           <div className="space-y-1">
             <Switch
               label="이 파일만 다른 비율"
@@ -302,6 +333,7 @@ export function ImageResultBoard({
   verb,
   resizeEnabled,
   globalScale,
+  customBox,
   onRemove,
   onRetry,
   onCompare,
@@ -326,7 +358,7 @@ export function ImageResultBoard({
       case "error":
         return `${size} · 실패`;
       default:
-        return item.customScale !== undefined && resizeEnabled
+        return item.customScale !== undefined && resizeEnabled && !customBox
           ? `${size} · 대기 중 · 비율 ${item.customScale}%`
           : `${size} · 대기 중`;
     }
@@ -367,6 +399,7 @@ export function ImageResultBoard({
         isRunning={isRunning}
         resizeEnabled={resizeEnabled}
         globalScale={globalScale}
+        customBox={customBox}
         onRemove={() => onRemove(item.id)}
         onCustomScale={(value) => onCustomScale(item.id, value)}
       />

@@ -28,6 +28,7 @@ const MAX_FILES = 20;
 const CONCURRENCY = 2;
 const DEFAULT_QUALITY = 80;
 const DEFAULT_SCALE = 50;
+const MAX_OUTPUT_DIMENSION = 16383;
 const QUALITY_PRESETS = [60, 75, 90, 100];
 const TARGET_PRESETS = [
   { value: "100", unit: "KB" },
@@ -54,6 +55,17 @@ const FORMAT_OPTIONS: { value: OutputFormat; label: string }[] = [
 
 type SizeMode = "quality" | "target";
 type TargetUnit = "KB" | "MB";
+type ResizeMode = "percent" | "custom";
+
+// 빈 칸은 "자동"이라 undefined, 1~16383 정수가 아니면 null(잘못된 값)
+function parsePixels(value: string) {
+  if (value.trim() === "") return undefined;
+  const amount = Number(value);
+  if (!Number.isInteger(amount) || amount < 1 || amount > MAX_OUTPUT_DIMENSION) {
+    return null;
+  }
+  return amount;
+}
 
 function parseTargetBytes(value: string, unit: TargetUnit) {
   const amount = Number(value);
@@ -83,6 +95,8 @@ function describeError(item: QueueItem) {
 interface CompressionJob {
   item: QueueItem;
   scalePercent: number;
+  maxWidth?: number;
+  maxHeight?: number;
 }
 
 function createId() {
@@ -130,6 +144,9 @@ export default function ImageOptimizer({
   const [quality, setQuality] = useState(DEFAULT_QUALITY);
   const [resizeEnabled, setResizeEnabled] = useState(false);
   const [globalScale, setGlobalScale] = useState(DEFAULT_SCALE);
+  const [resizeMode, setResizeMode] = useState<ResizeMode>("percent");
+  const [customWidth, setCustomWidth] = useState("");
+  const [customHeight, setCustomHeight] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [sizeMode, setSizeMode] = useState<SizeMode>("quality");
   const [targetValue, setTargetValue] = useState("500");
@@ -144,6 +161,17 @@ export default function ImageOptimizer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const targetBytes = parseTargetBytes(targetValue, targetUnit);
   const targetInvalid = sizeMode === "target" && targetBytes === null;
+  const widthPx = parsePixels(customWidth);
+  const heightPx = parsePixels(customHeight);
+  const customResize = resizeEnabled && resizeMode === "custom";
+  const widthInvalid = customResize && widthPx === null;
+  const heightInvalid = customResize && heightPx === null;
+  const customEmpty =
+    customResize && widthPx === undefined && heightPx === undefined;
+  const resizeInvalid = widthInvalid || heightInvalid || customEmpty;
+  const customBox = customResize
+    ? { width: widthPx ?? undefined, height: heightPx ?? undefined }
+    : null;
   const verb = forcedFormat ? "변환" : "압축";
 
   // 결과·미리보기 blob URL은 목록에서 빠지거나(삭제·비우기·다시 압축) 화면이 사라질 때 해제한다.
@@ -217,7 +245,7 @@ export default function ImageOptimizer({
   const now = useNow(processingCount > 0);
 
   const runJob = useCallback(
-    async ({ item, scalePercent }: CompressionJob) => {
+    async ({ item, scalePercent, maxWidth, maxHeight }: CompressionJob) => {
       updateItem(item.id, { status: "compressing", startedAt: Date.now() });
       const name = item.originalFile.name;
       try {
@@ -225,6 +253,8 @@ export default function ImageOptimizer({
           targetFormat: item.targetFormat,
           quality: item.quality ?? DEFAULT_QUALITY,
           scalePercent,
+          maxWidth,
+          maxHeight,
           targetBytes: item.targetBytes,
           stripMetadata: item.stripMetadata,
         });
@@ -260,7 +290,7 @@ export default function ImageOptimizer({
   const startCompression = async (
     mode: "queued" | "all" | { only: string },
   ) => {
-    if (isRunning || targetInvalid) return;
+    if (isRunning || targetInvalid || resizeInvalid) return;
 
     const jobs: CompressionJob[] = [];
     const nextQueue = queue.map((item) => {
@@ -292,7 +322,10 @@ export default function ImageOptimizer({
       };
       jobs.push({
         item: updated,
-        scalePercent: resizeEnabled ? (item.customScale ?? globalScale) : 100,
+        scalePercent:
+          resizeEnabled && !customBox ? (item.customScale ?? globalScale) : 100,
+        maxWidth: customBox?.width,
+        maxHeight: customBox?.height,
       });
       return updated;
     });
@@ -497,25 +530,79 @@ export default function ImageOptimizer({
           disabled={isRunning}
           hint={
             resizeEnabled
-              ? "원본 크기를 기준으로 같은 비율을 적용하고 가로세로 비율은 유지합니다. 대기 중인 파일을 누르면 파일별 비율을 정할 수 있습니다."
+              ? resizeMode === "percent"
+                ? "원본 크기를 기준으로 같은 비율을 적용하고 가로세로 비율은 유지합니다. 대기 중인 파일을 누르면 파일별 비율을 정할 수 있습니다."
+                : "입력한 크기 안에 들어오도록 줄이고 가로세로 비율은 유지합니다. 원본보다 키우지는 않습니다."
               : "원본 해상도를 유지합니다."
           }
         />
         {resizeEnabled && (
-          <div className="mt-2">
-            <div className="flex items-baseline justify-between">
-              <SettingLabel>비율</SettingLabel>
-              <span className="text-base font-semibold">{globalScale}%</span>
-            </div>
-            <Slider
-              min={10}
-              max={100}
-              step={5}
-              value={[globalScale]}
-              onValueChange={([value]) => setGlobalScale(value)}
+          <div className="mt-2 space-y-2">
+            <SegmentedControl
+              aria-label="크기 조절 방식"
+              value={resizeMode}
+              onValueChange={setResizeMode}
               disabled={isRunning}
-              aria-label="크기 비율"
+              options={[
+                { value: "percent", label: "비율" },
+                { value: "custom", label: "사용자 정의" },
+              ]}
             />
+            {resizeMode === "percent" ? (
+              <div>
+                <div className="flex items-baseline justify-between">
+                  <SettingLabel>비율</SettingLabel>
+                  <span className="text-base font-semibold">{globalScale}%</span>
+                </div>
+                <Slider
+                  min={10}
+                  max={100}
+                  step={5}
+                  value={[globalScale]}
+                  onValueChange={([value]) => setGlobalScale(value)}
+                  disabled={isRunning}
+                  aria-label="크기 비율"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField
+                    label="가로"
+                    min={1}
+                    max={MAX_OUTPUT_DIMENSION}
+                    step={1}
+                    placeholder="자동"
+                    value={customWidth}
+                    onChange={(event) => setCustomWidth(event.target.value)}
+                    disabled={isRunning}
+                    error={widthInvalid ? `1~${MAX_OUTPUT_DIMENSION} 사이 정수로 입력하세요.` : undefined}
+                    unit="px"
+                  />
+                  <NumberField
+                    label="세로"
+                    min={1}
+                    max={MAX_OUTPUT_DIMENSION}
+                    step={1}
+                    placeholder="자동"
+                    value={customHeight}
+                    onChange={(event) => setCustomHeight(event.target.value)}
+                    disabled={isRunning}
+                    error={heightInvalid ? `1~${MAX_OUTPUT_DIMENSION} 사이 정수로 입력하세요.` : undefined}
+                    unit="px"
+                  />
+                </div>
+                {customEmpty ? (
+                  <p className="text-xs text-danger">
+                    가로나 세로 중 하나는 입력하세요.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted">
+                    비워 두면 자동입니다. 1~{MAX_OUTPUT_DIMENSION}px까지 입력할 수 있습니다.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -586,7 +673,7 @@ export default function ImageOptimizer({
         <Button
           variant="primary"
           onClick={onPrimary}
-          disabled={queue.length === 0 || targetInvalid}
+          disabled={queue.length === 0 || targetInvalid || resizeInvalid}
           loading={isRunning}
         >
           {primaryLabel}
@@ -685,6 +772,7 @@ export default function ImageOptimizer({
             verb={verb}
             resizeEnabled={resizeEnabled}
             globalScale={globalScale}
+            customBox={customBox}
             onRemove={removeItem}
             onRetry={(id) => void startCompression({ only: id })}
             onCompare={setCompareId}

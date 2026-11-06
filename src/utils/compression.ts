@@ -4,6 +4,8 @@ export interface CompressImageOptions {
   targetFormat: OutputFormat;
   quality: number;
   scalePercent?: number;
+  maxWidth?: number;
+  maxHeight?: number;
   targetBytes?: number;
   stripMetadata?: boolean;
 }
@@ -73,7 +75,15 @@ export async function requestCompression(
 
 export async function compressImage(
   file: File,
-  { targetFormat, quality, scalePercent, targetBytes, stripMetadata }: CompressImageOptions,
+  {
+    targetFormat,
+    quality,
+    scalePercent,
+    maxWidth,
+    maxHeight,
+    targetBytes,
+    stripMetadata,
+  }: CompressImageOptions,
 ): Promise<CompressedImage> {
   return requestCompression(
     { file },
@@ -83,6 +93,8 @@ export async function compressImage(
       targetFormat,
       quality,
       scalePercent: scalePercent && scalePercent < 100 ? scalePercent : undefined,
+      maxWidth,
+      maxHeight,
       targetBytes,
       stripMetadata,
     },
