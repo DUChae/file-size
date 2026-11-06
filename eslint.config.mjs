@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // scripts/copy-pdfjs-assets.mjs가 복사하는 생성물이라 린트 대상이 아니다.
+    "public/pdfjs/**",
   ]),
 ]);
 

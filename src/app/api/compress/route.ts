@@ -74,8 +74,9 @@ function parseWebSizeDimension(
   }
 
   if (!Number.isFinite(value) || (allowZero ? value < 0 : value <= 0)) {
-    throw new Error(
+    throw new RequestError(
       `${label} must be ${allowZero ? "0 or greater" : "greater than 0"}.`,
+      400,
     );
   }
 
@@ -93,7 +94,7 @@ function parseRangedInteger(
   }
 
   if (!Number.isFinite(value) || value < min || value > max) {
-    throw new Error(`${label} must be between ${min} and ${max}.`);
+    throw new RequestError(`${label} must be between ${min} and ${max}.`, 400);
   }
 
   return Math.round(value);
