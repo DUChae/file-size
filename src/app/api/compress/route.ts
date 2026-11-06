@@ -290,6 +290,9 @@ export async function POST(req: NextRequest) {
 
     const inputBuffer = await readSource(form);
     const originalSize = inputBuffer.length;
+    if (originalSize === 0) {
+      throw new RequestError("The uploaded file is empty.", 400);
+    }
 
     const isGif =
       mimeType === "image/gif" || filename.toLowerCase().endsWith(".gif");
@@ -300,10 +303,16 @@ export async function POST(req: NextRequest) {
     if (!isGif) {
       sharpInstance = sharpInstance.rotate();
     }
-    const metadata = await sharpInstance.metadata();
+    // sharp는 형식을 알 수 없거나 깨진 파일의 헤더를 읽을 때 던진다. 업로드한 파일 탓이라 400이다.
+    let metadata: sharp.Metadata;
+    try {
+      metadata = await sharpInstance.metadata();
+    } catch {
+      throw new RequestError("Unsupported or corrupted image.", 400);
+    }
 
     if (!metadata.width || !metadata.height) {
-      throw new Error("Invalid image metadata");
+      throw new RequestError("Unsupported or corrupted image.", 400);
     }
 
     let outputMime = mimeType;
